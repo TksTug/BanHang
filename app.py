@@ -213,7 +213,8 @@ def day_status():
 @app.route("/api/customers", methods=["GET"])
 def get_customers():
     conn = get_db_conn()
-    if session.get("admin_logged_in"):
+    active_only = request.args.get("active") == "1"
+    if not active_only and session.get("admin_logged_in"):
         rows = conn.execute(
             """
             SELECT id, name, group_type, is_active, created_at
@@ -285,6 +286,20 @@ def update_customer(customer_id):
         conn.close()
         return jsonify({"success": False, "message": "Tên khách đã tồn tại."}), 400
     conn.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/customers/<int:customer_id>", methods=["DELETE"])
+@api_admin_required
+def delete_customer(customer_id):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
+    conn.commit()
+    deleted = cursor.rowcount
+    conn.close()
+    if not deleted:
+        return jsonify({"success": False, "message": "Không tìm thấy khách."}), 404
     return jsonify({"success": True})
 
 

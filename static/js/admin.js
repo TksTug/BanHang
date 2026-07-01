@@ -109,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button class="btn ${customer.is_active ? 'btn-danger' : 'btn-confirm'} toggle-customer-btn" type="button" data-id="${customer.id}" data-active="${customer.is_active ? '1' : '0'}">
                         ${customer.is_active ? 'Ẩn' : 'Bật'}
                     </button>
+                    <button class="btn btn-danger delete-customer-btn" type="button" data-id="${customer.id}" data-name="${customer.name}">Xóa</button>
                 </div>
             </article>
         `).join('');
@@ -439,6 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
     customerAdminList.addEventListener('click', async (event) => {
         const editBtn = event.target.closest('.edit-customer-btn');
         const toggleBtn = event.target.closest('.toggle-customer-btn');
+        const deleteBtn = event.target.closest('.delete-customer-btn');
         if (editBtn) {
             customerId.value = editBtn.dataset.id;
             customerName.value = editBtn.dataset.name;
@@ -451,6 +453,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!confirm(actionText)) return;
             await fetch(`/api/customers/${toggleBtn.dataset.id}/toggle-active`, { method: 'POST' });
             await loadCustomers();
+        }
+        if (deleteBtn) {
+            const name = deleteBtn.dataset.name;
+            if (!confirm(`Bạn có chắc chắn muốn XÓA HOÀN TOÀN khách hàng "${name}" khỏi cơ sở dữ liệu? Việc này không thể hoàn tác.`)) return;
+            const response = await fetch(`/api/customers/${deleteBtn.dataset.id}`, { method: 'DELETE' });
+            const result = await response.json();
+            if (!result.success) {
+                alert(result.message || 'Không thể xóa khách.');
+                return;
+            }
+            await loadCustomers();
+            await refreshOrders();
         }
     });
 

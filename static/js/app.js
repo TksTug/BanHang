@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const loadCustomers = async () => {
-        const response = await fetch('/api/customers');
+        const response = await fetch('/api/customers?active=1');
         customers = await response.json();
         renderCustomerList();
     };

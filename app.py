@@ -1,8 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 from functools import wraps
 from pathlib import Path
 from uuid import uuid4
-import libsql
 import os
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -11,7 +10,10 @@ from werkzeug.utils import secure_filename
 import cloudinary
 import cloudinary.uploader
 
-from database import DB_FILE, init_db
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
+from database import init_db, get_db_conn
 
 # Cấu hình Cloudinary bằng CLOUDINARY_URL biến môi trường
 cloudinary.config(
@@ -27,19 +29,6 @@ ADMIN_PASSWORD = "123123"
 app = Flask(__name__)
 app.secret_key = "quan-an-admin-secret-key"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-
-import libsql
-
-DB_URL = os.environ.get("TURSO_DATABASE_URL", "libsql://balhang-tungvt.turso.io")
-DB_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "eyJhbGciOiJFUzI1NiIsImtpZCI6ImtleS0xIn0.eyJnZW5lcmF0ZWRieSI6ImRhc2hib2FyZCIsInN1YiI6ImJhbGhhbmctdHVuZ3Z0IiwidHlwZSI6ImFjY2Vzc190b2tlbiJ9.T8aE2_rW-jCpl92v_Jc_y0Z5h9g1N4z9v-bA4h4")
-
-def get_db_conn():
-    # Sử dụng định dạng URL kèm tham số token để tương thích tuyệt đối với libsql python
-    connection_string = f"{DB_URL}?authToken={DB_TOKEN}"
-    conn = libsql.connect(database=connection_string)
-    conn.row_factory = libsql.Row
-    return conn
 
 
 def today_key():
@@ -107,46 +96,57 @@ def order_to_dict(order):
 
 
 def sync_order_payment(conn, order_id):
-    row = conn.execute("SELECT COALESCE(SUM(amount), 0) AS paid_amount FROM payments WHERE order_id = ?", (order_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT COALESCE(SUM(amount), 0) AS paid_amount FROM payments WHERE order_id = %s", (order_id,))
+    row = cursor.fetchone()
     paid_amount = float(row["paid_amount"] or 0)
-    order = conn.execute("SELECT total_amount FROM orders WHERE id = ?", (order_id,)).fetchone()
+    cursor.execute("SELECT total_amount FROM orders WHERE id = %s", (order_id,))
+    order = cursor.fetchone()
     if not order:
+        cursor.close()
         return
     paid_amount = min(max(paid_amount, 0), float(order["total_amount"]))
     is_paid = 1 if paid_amount >= float(order["total_amount"]) else 0
-    conn.execute("UPDATE orders SET paid_amount = ?, is_paid = ? WHERE id = ?", (paid_amount, is_paid, order_id))
+    cursor.execute("UPDATE orders SET paid_amount = %s, is_paid = %s WHERE id = %s", (paid_amount, is_paid, order_id))
+    cursor.close()
 
 
 def get_setting(conn, order_date):
-    row = conn.execute("SELECT order_date, is_closed FROM daily_settings WHERE order_date = ?", (order_date,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT order_date, is_closed FROM daily_settings WHERE order_date = %s", (order_date,))
+    row = cursor.fetchone()
+    cursor.close()
     if row:
         return dict(row)
     return {"order_date": order_date, "is_closed": 0}
 
 
 def get_order_items(conn, order_id):
-    return [
-        dict(item)
-        for item in conn.execute(
-            "SELECT id, product_id, product_name, price, quantity FROM order_items WHERE order_id = ?",
-            (order_id,),
-        ).fetchall()
-    ]
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute(
+        "SELECT id, product_id, product_name, price, quantity FROM order_items WHERE order_id = %s",
+        (order_id,),
+    )
+    items = cursor.fetchall()
+    cursor.close()
+    return [dict(item) for item in items]
 
 
 def get_order_payments(conn, order_id):
-    return [
-        dict(payment)
-        for payment in conn.execute(
-            "SELECT id, amount, method, note, created_at FROM payments WHERE order_id = ? ORDER BY created_at DESC, id DESC",
-            (order_id,),
-        ).fetchall()
-    ]
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute(
+        "SELECT id, amount, method, note, created_at FROM payments WHERE order_id = %s ORDER BY created_at DESC, id DESC",
+        (order_id,),
+    )
+    payments = cursor.fetchall()
+    cursor.close()
+    return [dict(payment) for payment in payments]
 
 
 def calculate_items_total(conn, items, public_only=True):
     total_amount = 0
     saved_items = []
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     for item in items:
         try:
             product_id = int(item.get("id") or item.get("product_id"))
@@ -156,15 +156,18 @@ def calculate_items_total(conn, items, public_only=True):
         if quantity <= 0:
             continue
         if public_only:
-            product = conn.execute(
-                "SELECT id, name, price FROM products WHERE id = ? AND is_available = 1 AND is_sold_out = 0",
+            cursor.execute(
+                "SELECT id, name, price FROM products WHERE id = %s AND is_available = 1 AND is_sold_out = 0",
                 (product_id,),
-            ).fetchone()
+            )
+            product = cursor.fetchone()
         else:
-            product = conn.execute("SELECT id, name, price FROM products WHERE id = ?", (product_id,)).fetchone()
+            cursor.execute("SELECT id, name, price FROM products WHERE id = %s", (product_id,))
+            product = cursor.fetchone()
         if product:
             total_amount += float(product["price"]) * quantity
             saved_items.append((product["id"], product["name"], float(product["price"]), quantity))
+    cursor.close()
     return total_amount, saved_items
 
 
@@ -216,15 +219,17 @@ def day_status():
             return jsonify({"success": False, "message": "Bạn cần đăng nhập admin."}), 401
         data = request.get_json() or {}
         is_closed = 1 if data.get("is_closed") else 0
-        conn.execute(
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
             """
             INSERT INTO daily_settings (order_date, is_closed, updated_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(order_date) DO UPDATE SET is_closed = excluded.is_closed, updated_at = CURRENT_TIMESTAMP
+            VALUES (%s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT(order_date) DO UPDATE SET is_closed = EXCLUDED.is_closed, updated_at = CURRENT_TIMESTAMP
             """,
             (order_date, is_closed),
         )
         conn.commit()
+        cursor.close()
     setting = get_setting(conn, order_date)
     conn.close()
     return jsonify({"success": True, **setting})
@@ -233,24 +238,28 @@ def day_status():
 @app.route("/api/customers", methods=["GET"])
 def get_customers():
     conn = get_db_conn()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     active_only = request.args.get("active") == "1"
     if not active_only and session.get("admin_logged_in"):
-        rows = conn.execute(
+        cursor.execute(
             """
             SELECT id, name, group_type, is_active, initial_debt, created_at
             FROM customers
-            ORDER BY CASE group_type WHEN 'vjp' THEN 0 ELSE 1 END, name COLLATE NOCASE
+            ORDER BY CASE group_type WHEN 'vjp' THEN 0 ELSE 1 END, lower(name)
             """
-        ).fetchall()
+        )
+        rows = cursor.fetchall()
     else:
-        rows = conn.execute(
+        cursor.execute(
             """
             SELECT id, name, group_type, initial_debt
             FROM customers
             WHERE is_active = 1
-            ORDER BY CASE group_type WHEN 'vjp' THEN 0 ELSE 1 END, name COLLATE NOCASE
+            ORDER BY CASE group_type WHEN 'vjp' THEN 0 ELSE 1 END, lower(name)
             """
-        ).fetchall()
+        )
+        rows = cursor.fetchall()
+    cursor.close()
     conn.close()
     return jsonify([dict(row) for row in rows])
 
@@ -268,13 +277,19 @@ def create_customer():
     if not name:
         return jsonify({"success": False, "message": "Tên khách là bắt buộc."}), 400
     conn = get_db_conn()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     try:
-        cursor = conn.execute("INSERT INTO customers (name, group_type, initial_debt, is_active) VALUES (?, ?, ?, 1)", (name, group_type, initial_debt))
+        cursor.execute(
+            "INSERT INTO customers (name, group_type, initial_debt, is_active) VALUES (%s, %s, %s, 1) RETURNING id",
+            (name, group_type, initial_debt)
+        )
         conn.commit()
-    except libsql.IntegrityError:
+        customer_id = cursor.fetchone()["id"]
+    except psycopg2.IntegrityError:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Tên khách đã tồn tại."}), 400
-    customer_id = cursor.lastrowid
+    cursor.close()
     conn.close()
     return jsonify({"success": True, "id": customer_id})
 
@@ -283,19 +298,26 @@ def create_customer():
 @api_admin_required
 def toggle_customer_active(customer_id):
     conn = get_db_conn()
-    customer = conn.execute("SELECT is_active FROM customers WHERE id = ?", (customer_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT is_active FROM customers WHERE id = %s", (customer_id,))
+    customer = cursor.fetchone()
     if not customer:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Không tìm thấy khách."}), 404
     new_status = 0 if customer["is_active"] else 1
-    conn.execute("UPDATE customers SET is_active = ? WHERE id = ?", (new_status, customer_id))
+    cursor.execute("UPDATE customers SET is_active = %s WHERE id = %s", (new_status, customer_id))
     conn.commit()
+    cursor.close()
     conn.close()
     return jsonify({"success": True, "is_active": new_status})
+
+
 @app.route("/api/customers/<int:customer_id>", methods=["PUT"])
 @api_admin_required
 def update_customer(customer_id):
     conn = get_db_conn()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     data = request.get_json() or {}
     name = data.get("name", "").strip()
     group_type = "vjp" if data.get("group_type") == "vjp" else "regular"
@@ -305,15 +327,21 @@ def update_customer(customer_id):
     except (TypeError, ValueError):
         initial_debt = 0.0
     if not name:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Tên khách là bắt buộc."}), 400
     try:
-        conn.execute("UPDATE customers SET name = ?, group_type = ?, initial_debt = ?, is_active = ? WHERE id = ?", (name, group_type, initial_debt, is_active, customer_id))
-        conn.execute("UPDATE orders SET customer_name = ? WHERE customer_id = ?", (name, customer_id))
+        cursor.execute(
+            "UPDATE customers SET name = %s, group_type = %s, initial_debt = %s, is_active = %s WHERE id = %s",
+            (name, group_type, initial_debt, is_active, customer_id)
+        )
+        cursor.execute("UPDATE orders SET customer_name = %s WHERE customer_id = %s", (name, customer_id))
         conn.commit()
-    except libsql.IntegrityError:
+    except psycopg2.IntegrityError:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Tên khách đã tồn tại."}), 400
+    cursor.close()
     conn.close()
     return jsonify({"success": True})
 
@@ -322,10 +350,11 @@ def update_customer(customer_id):
 @api_admin_required
 def delete_customer(customer_id):
     conn = get_db_conn()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("DELETE FROM customers WHERE id = %s", (customer_id,))
     conn.commit()
     deleted = cursor.rowcount
+    cursor.close()
     conn.close()
     if not deleted:
         return jsonify({"success": False, "message": "Không tìm thấy khách."}), 404
@@ -335,11 +364,15 @@ def delete_customer(customer_id):
 @app.route("/api/products", methods=["GET"])
 def get_products():
     conn = get_db_conn()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     public_only = request.args.get("public") == "1"
     if not public_only and session.get("admin_logged_in"):
-        products = conn.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
+        cursor.execute("SELECT * FROM products ORDER BY id DESC")
+        products = cursor.fetchall()
     else:
-        products = conn.execute("SELECT * FROM products WHERE is_available = 1 ORDER BY is_sold_out ASC, id DESC").fetchall()
+        cursor.execute("SELECT * FROM products WHERE is_available = 1 ORDER BY is_sold_out ASC, id DESC")
+        products = cursor.fetchall()
+    cursor.close()
     conn.close()
     return jsonify([dict(p) for p in products])
 
@@ -360,16 +393,17 @@ def create_product():
     except ValueError as exc:
         return jsonify({"success": False, "message": str(exc)}), 400
     conn = get_db_conn()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute(
         """
         INSERT INTO products (name, price, image_url, description, is_available, is_sold_out)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
         """,
         (name, price, uploaded_url or image_url, description, is_available, is_sold_out),
     )
     conn.commit()
-    product_id = cursor.lastrowid
+    product_id = cursor.fetchone()["id"]
+    cursor.close()
     conn.close()
     return jsonify({"success": True, "id": product_id})
 
@@ -390,18 +424,19 @@ def update_product(product_id):
     except ValueError as exc:
         return jsonify({"success": False, "message": str(exc)}), 400
     conn = get_db_conn()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute(
         """
         UPDATE products
-        SET name = ?, price = ?, image_url = ?,
-            description = ?, is_available = ?, is_sold_out = ?
-        WHERE id = ?
+        SET name = %s, price = %s, image_url = %s,
+            description = %s, is_available = %s, is_sold_out = %s
+        WHERE id = %s
         """,
         (name, price, uploaded_url if uploaded_url else image_url, description, is_available, is_sold_out, product_id),
     )
     conn.commit()
     updated = cursor.rowcount
+    cursor.close()
     conn.close()
     if not updated:
         return jsonify({"success": False, "message": "Không tìm thấy món."}), 404
@@ -417,10 +452,11 @@ def update_product_flag(product_id, field):
     column = "is_available" if field == "availability" else "is_sold_out"
     value = 1 if (data.get("is_available") or data.get("is_sold_out")) else 0
     conn = get_db_conn()
-    cursor = conn.cursor()
-    cursor.execute(f"UPDATE products SET {column} = ? WHERE id = ?", (value, product_id))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute(f"UPDATE products SET {column} = %s WHERE id = %s", (value, product_id))
     conn.commit()
     updated = cursor.rowcount
+    cursor.close()
     conn.close()
     if not updated:
         return jsonify({"success": False, "message": "Không tìm thấy món."}), 404
@@ -431,10 +467,11 @@ def update_product_flag(product_id, field):
 @api_admin_required
 def delete_product(product_id):
     conn = get_db_conn()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM products WHERE id = ?", (product_id,))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("DELETE FROM products WHERE id = %s", (product_id,))
     conn.commit()
     deleted = cursor.rowcount
+    cursor.close()
     conn.close()
     if not deleted:
         return jsonify({"success": False, "message": "Không tìm thấy món."}), 404
@@ -452,28 +489,32 @@ def create_order():
     if get_setting(conn, today_key())["is_closed"]:
         conn.close()
         return jsonify({"success": False, "message": "Hôm nay đã chốt đơn, không nhận thêm đơn mới."}), 400
-    customer = conn.execute("SELECT id, name FROM customers WHERE id = ? AND is_active = 1", (customer_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT id, name FROM customers WHERE id = %s AND is_active = 1", (customer_id,))
+    customer = cursor.fetchone()
     if not customer or not payment_method or not items:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Vui lòng chọn tên, hình thức thanh toán và món."}), 400
     total_amount, saved_items = calculate_items_total(conn, items, public_only=True)
     if not saved_items:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Giỏ hàng không có món đang bán."}), 400
-    cursor = conn.cursor()
     cursor.execute(
         """
         INSERT INTO orders (customer_id, customer_name, total_amount, paid_amount, payment_method, note, is_paid)
-        VALUES (?, ?, ?, 0, ?, ?, 0)
+        VALUES (%s, %s, %s, 0, %s, %s, 0) RETURNING id
         """,
         (customer["id"], customer["name"], total_amount, payment_method, note),
     )
-    order_id = cursor.lastrowid
+    order_id = cursor.fetchone()["id"]
     cursor.executemany(
-        "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (%s, %s, %s, %s, %s)",
         [(order_id, product_id, name, price, quantity) for product_id, name, price, quantity in saved_items],
     )
     conn.commit()
+    cursor.close()
     conn.close()
     return jsonify({"success": True, "message": "Đặt hàng thành công!", "order_id": order_id})
 
@@ -493,30 +534,35 @@ def get_customer_orders():
     customer_id = request.args.get("customer_id")
     customer_name = request.args.get("customer_name", "").strip()
     conn = get_db_conn()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     if customer_id:
-        orders = conn.execute(
+        cursor.execute(
             """
             SELECT o.*, c.group_type FROM orders o
             LEFT JOIN customers c ON c.id = o.customer_id
-            WHERE o.customer_id = ?
+            WHERE o.customer_id = %s
             ORDER BY o.created_at DESC
             """,
             (customer_id,),
-        ).fetchall()
+        )
+        orders = cursor.fetchall()
     elif customer_name:
-        orders = conn.execute(
+        cursor.execute(
             """
             SELECT o.*, c.group_type FROM orders o
             LEFT JOIN customers c ON c.id = o.customer_id
-            WHERE lower(o.customer_name) = lower(?)
+            WHERE lower(o.customer_name) = lower(%s)
             ORDER BY o.created_at DESC
             """,
             (customer_name,),
-        ).fetchall()
+        )
+        orders = cursor.fetchall()
     else:
+        cursor.close()
         conn.close()
         return jsonify([])
     result = build_order_list(conn, orders)
+    cursor.close()
     conn.close()
     return jsonify(result)
 
@@ -524,22 +570,28 @@ def get_customer_orders():
 @app.route("/api/customer-summary/<int:customer_id>", methods=["GET"])
 def get_customer_summary(customer_id):
     conn = get_db_conn()
-    customer = conn.execute("SELECT id, name, group_type FROM customers WHERE id = ?", (customer_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT id, name, group_type FROM customers WHERE id = %s", (customer_id,))
+    customer = cursor.fetchone()
     if not customer:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Không tìm thấy khách."}), 404
-    row = conn.execute(
+    cursor.execute(
         """
         SELECT COALESCE(SUM(total_amount), 0) AS total_amount,
                COALESCE(SUM(paid_amount), 0) AS paid_amount,
                COALESCE(SUM(total_amount - paid_amount), 0) AS remaining_amount,
                COUNT(*) AS order_count
-        FROM orders WHERE customer_id = ?
+        FROM orders WHERE customer_id = %s
         """,
         (customer_id,),
-    ).fetchone()
-    orders = conn.execute("SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC", (customer_id,)).fetchall()
+    )
+    row = cursor.fetchone()
+    cursor.execute("SELECT * FROM orders WHERE customer_id = %s ORDER BY created_at DESC", (customer_id,))
+    orders = cursor.fetchall()
     order_list = build_order_list(conn, orders)
+    cursor.close()
     conn.close()
     return jsonify({"success": True, "customer": dict(customer), "summary": dict(row), "orders": order_list})
 
@@ -548,14 +600,17 @@ def get_customer_summary(customer_id):
 @api_admin_required
 def get_all_orders():
     conn = get_db_conn()
-    orders = conn.execute(
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute(
         """
         SELECT o.*, c.group_type FROM orders o
         LEFT JOIN customers c ON c.id = o.customer_id
         ORDER BY o.created_at DESC
         """
-    ).fetchall()
+    )
+    orders = cursor.fetchall()
     result = build_order_list(conn, orders)
+    cursor.close()
     conn.close()
     return jsonify(result)
 
@@ -564,9 +619,11 @@ def get_all_orders():
 @api_admin_required
 def update_order(order_id):
     conn = get_db_conn()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
     if request.method == "DELETE":
-        conn.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+        cursor.execute("DELETE FROM orders WHERE id = %s", (order_id,))
         conn.commit()
+        cursor.close()
         conn.close()
         return jsonify({"success": True})
     data = request.get_json() or {}
@@ -574,28 +631,32 @@ def update_order(order_id):
     payment_method = data.get("payment_method", "").strip()
     note = (data.get("note") or "").strip()
     items = data.get("items", [])
-    customer = conn.execute("SELECT id, name FROM customers WHERE id = ?", (customer_id,)).fetchone()
+    cursor.execute("SELECT id, name FROM customers WHERE id = %s", (customer_id,))
+    customer = cursor.fetchone()
     if not customer or not payment_method:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Thông tin đơn chưa hợp lệ."}), 400
     total_amount, saved_items = calculate_items_total(conn, items, public_only=False)
     if not saved_items:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Đơn cần ít nhất một món."}), 400
-    conn.execute(
+    cursor.execute(
         """
-        UPDATE orders SET customer_id = ?, customer_name = ?, payment_method = ?, note = ?, total_amount = ?
-        WHERE id = ?
+        UPDATE orders SET customer_id = %s, customer_name = %s, payment_method = %s, note = %s, total_amount = %s
+        WHERE id = %s
         """,
         (customer["id"], customer["name"], payment_method, note, total_amount, order_id),
     )
-    conn.execute("DELETE FROM order_items WHERE order_id = ?", (order_id,))
-    conn.executemany(
-        "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (?, ?, ?, ?, ?)",
+    cursor.execute("DELETE FROM order_items WHERE order_id = %s", (order_id,))
+    cursor.executemany(
+        "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (%s, %s, %s, %s, %s)",
         [(order_id, product_id, name, price, quantity) for product_id, name, price, quantity in saved_items],
     )
     sync_order_payment(conn, order_id)
     conn.commit()
+    cursor.close()
     conn.close()
     return jsonify({"success": True})
 
@@ -611,16 +672,20 @@ def add_order_payment(order_id):
     if amount <= 0:
         return jsonify({"success": False, "message": "Số tiền trả phải lớn hơn 0."}), 400
     conn = get_db_conn()
-    order = conn.execute("SELECT id FROM orders WHERE id = ?", (order_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT id FROM orders WHERE id = %s", (order_id,))
+    order = cursor.fetchone()
     if not order:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Không tìm thấy đơn hàng."}), 404
-    conn.execute(
-        "INSERT INTO payments (order_id, amount, method, note) VALUES (?, ?, ?, ?)",
+    cursor.execute(
+        "INSERT INTO payments (order_id, amount, method, note) VALUES (%s, %s, %s, %s)",
         (order_id, amount, data.get("method", ""), data.get("note", "")),
     )
     sync_order_payment(conn, order_id)
     conn.commit()
+    cursor.close()
     conn.close()
     return jsonify({"success": True})
 
@@ -634,19 +699,23 @@ def set_order_payment(order_id):
     except (TypeError, ValueError):
         return jsonify({"success": False, "message": "Số tiền đã trả không hợp lệ."}), 400
     conn = get_db_conn()
-    order = conn.execute("SELECT total_amount, paid_amount FROM orders WHERE id = ?", (order_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT total_amount, paid_amount FROM orders WHERE id = %s", (order_id,))
+    order = cursor.fetchone()
     if not order:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Không tìm thấy đơn hàng."}), 404
     target_paid = min(max(target_paid, 0), float(order["total_amount"]))
     diff = target_paid - float(order["paid_amount"] or 0)
     if abs(diff) > 0.01:
-        conn.execute(
-            "INSERT INTO payments (order_id, amount, method, note) VALUES (?, ?, ?, ?)",
+        cursor.execute(
+            "INSERT INTO payments (order_id, amount, method, note) VALUES (%s, %s, %s, %s)",
             (order_id, diff, "Điều chỉnh", "Admin đặt lại số đã trả"),
         )
     sync_order_payment(conn, order_id)
     conn.commit()
+    cursor.close()
     conn.close()
     return jsonify({"success": True})
 
@@ -655,18 +724,22 @@ def set_order_payment(order_id):
 @api_admin_required
 def get_order_matrix():
     conn = get_db_conn()
-    orders = conn.execute(
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute(
         """
-        SELECT o.id, o.customer_name, o.total_amount, o.paid_amount, date(o.created_at) AS order_date,
+        SELECT o.id, o.customer_name, o.total_amount, o.paid_amount, o.created_at::date AS order_date,
                c.group_type, COALESCE(c.initial_debt, 0) AS initial_debt
         FROM orders o
         LEFT JOIN customers c ON c.id = o.customer_id
         ORDER BY order_date ASC, o.customer_name ASC, o.id ASC
         """
-    ).fetchall()
+    )
+    orders = cursor.fetchall()
     
     # Lấy toàn bộ khách hàng để đảm bảo những khách chưa gọi món ngày nào nhưng có nợ cũ vẫn xuất hiện trong ma trận
-    all_custs = conn.execute("SELECT name, group_type, initial_debt FROM customers WHERE is_active = 1").fetchall()
+    cursor.execute("SELECT name, group_type, initial_debt FROM customers WHERE is_active = 1")
+    all_custs = cursor.fetchall()
+    cursor.close()
     conn.close()
     
     dates = []
@@ -683,7 +756,8 @@ def get_order_matrix():
         
     for order in orders:
         order_data = order_to_dict(order)
-        order_date = order["order_date"]
+        # Convert date object to string YYYY-MM-DD
+        order_date = order["order_date"].isoformat() if hasattr(order["order_date"], "isoformat") else str(order["order_date"])
         if order_date not in dates:
             dates.append(order_date)
             
@@ -704,17 +778,21 @@ def get_order_matrix():
 @app.route("/api/public-debt", methods=["GET"])
 def get_public_debt():
     conn = get_db_conn()
-    orders = conn.execute(
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute(
         """
         SELECT o.id, o.customer_name, o.total_amount, o.paid_amount, o.created_at, c.group_type, COALESCE(c.initial_debt, 0) as initial_debt
         FROM orders o
         LEFT JOIN customers c ON c.id = o.customer_id
         ORDER BY o.customer_name ASC, o.created_at ASC
         """
-    ).fetchall()
+    )
+    orders = cursor.fetchall()
     
     # Lấy toàn bộ khách hàng để nếu có khách chỉ có nợ cũ (chưa đặt món) vẫn hiện trong danh sách thanh toán
-    all_custs = conn.execute("SELECT name, group_type, initial_debt FROM customers WHERE is_active = 1").fetchall()
+    cursor.execute("SELECT name, group_type, initial_debt FROM customers WHERE is_active = 1")
+    all_custs = cursor.fetchall()
+    cursor.close()
     conn.close()
     
     customers = {}
@@ -746,7 +824,8 @@ def get_public_debt():
         customer["total_debt"] += remaining
         if remaining > 0:
             # Lấy phần ngày YYYY-MM-DD
-            order_date_str = order["created_at"][:10]
+            created_at_val = order["created_at"]
+            order_date_str = created_at_val.strftime("%Y-%m-%d") if isinstance(created_at_val, (date, datetime)) else str(created_at_val)[:10]
             # Format ngày sang DD/MM/YYYY cho thân thiện
             try:
                 parts = order_date_str.split('-')
@@ -770,17 +849,21 @@ def get_public_debt():
 @api_admin_required
 def get_dashboard_stats():
     conn = get_db_conn()
-    row = conn.execute(
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute(
         """
         SELECT COALESCE(SUM(paid_amount), 0) AS total_revenue,
                COALESCE(SUM(total_amount - paid_amount), 0) AS outstanding_debt,
                COUNT(*) AS order_count
         FROM orders
         """
-    ).fetchone()
+    )
+    row = cursor.fetchone()
     
     # Lấy tổng nợ cũ từ bảng khách hàng
-    initial_debt_row = conn.execute("SELECT COALESCE(SUM(initial_debt), 0) AS total_initial_debt FROM customers WHERE is_active = 1").fetchone()
+    cursor.execute("SELECT COALESCE(SUM(initial_debt), 0) AS total_initial_debt FROM customers WHERE is_active = 1")
+    initial_debt_row = cursor.fetchone()
+    cursor.close()
     conn.close()
     
     stats = dict(row)
@@ -792,36 +875,44 @@ def get_dashboard_stats():
 def update_customer_order(order_id):
     data = request.get_json() or {}
     conn = get_db_conn()
-    order = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM orders WHERE id = %s", (order_id,))
+    order = cursor.fetchone()
     if not order:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Không tìm thấy đơn hàng."}), 404
     if float(order["paid_amount"] or 0) > 0:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Đơn đã thanh toán, không thể sửa."}), 400
     customer_id = data.get("customer_id")
     items = data.get("items", [])
     note = (data.get("note") or "").strip()
-    customer = conn.execute("SELECT id, name FROM customers WHERE id = ? AND is_active = 1", (customer_id,)).fetchone()
+    cursor.execute("SELECT id, name FROM customers WHERE id = %s AND is_active = 1", (customer_id,))
+    customer = cursor.fetchone()
     if not customer or not items:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Vui lòng chọn tên và ít nhất một món."}), 400
     total_amount, saved_items = calculate_items_total(conn, items, public_only=False)
     if not saved_items:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Đơn cần ít nhất một món hợp lệ."}), 400
     payment_method = data.get("payment_method") or order["payment_method"]
-    conn.execute(
-        "UPDATE orders SET customer_id = ?, customer_name = ?, payment_method = ?, note = ?, total_amount = ? WHERE id = ?",
+    cursor.execute(
+        "UPDATE orders SET customer_id = %s, customer_name = %s, payment_method = %s, note = %s, total_amount = %s WHERE id = %s",
         (customer["id"], customer["name"], payment_method, note, total_amount, order_id),
     )
-    conn.execute("DELETE FROM order_items WHERE order_id = ?", (order_id,))
-    conn.executemany(
-        "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (?, ?, ?, ?, ?)",
+    cursor.execute("DELETE FROM order_items WHERE order_id = %s", (order_id,))
+    cursor.executemany(
+        "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (%s, %s, %s, %s, %s)",
         [(order_id, pid, name, price, qty) for pid, name, price, qty in saved_items],
     )
     sync_order_payment(conn, order_id)
     conn.commit()
+    cursor.close()
     conn.close()
     return jsonify({"success": True, "message": "Đã cập nhật đơn hàng."})
 
@@ -837,32 +928,38 @@ def add_extra_item(order_id):
     if not product_name or price <= 0:
         return jsonify({"success": False, "message": "Vui lòng chọn món và giá hợp lệ."}), 400
     conn = get_db_conn()
-    order = conn.execute("SELECT id, total_amount FROM orders WHERE id = ?", (order_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT id, total_amount FROM orders WHERE id = %s", (order_id,))
+    order = cursor.fetchone()
     if not order:
+        cursor.close()
         conn.close()
         return jsonify({"success": False, "message": "Không tìm thấy đơn hàng."}), 404
-    product = conn.execute("SELECT id FROM products WHERE lower(name) = lower(?)", (product_name,)).fetchone()
+    cursor.execute("SELECT id FROM products WHERE lower(name) = lower(%s)", (product_name,))
+    product = cursor.fetchone()
     product_id = product["id"] if product else None
     
     target_name = product_name + " (thêm)"
-    existing_item = conn.execute(
-        "SELECT id, quantity FROM order_items WHERE order_id = ? AND product_name = ? AND price = ?",
+    cursor.execute(
+        "SELECT id, quantity FROM order_items WHERE order_id = %s AND product_name = %s AND price = %s",
         (order_id, target_name, price)
-    ).fetchone()
+    )
+    existing_item = cursor.fetchone()
     
     if existing_item:
         new_qty = existing_item["quantity"] + 1
-        conn.execute("UPDATE order_items SET quantity = ? WHERE id = ?", (new_qty, existing_item["id"]))
+        cursor.execute("UPDATE order_items SET quantity = %s WHERE id = %s", (new_qty, existing_item["id"]))
     else:
-        conn.execute(
-            "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (?, ?, ?, ?, 1)",
+        cursor.execute(
+            "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (%s, %s, %s, %s, 1)",
             (order_id, product_id, target_name, price),
         )
     
     new_total = float(order["total_amount"]) + price
-    conn.execute("UPDATE orders SET total_amount = ? WHERE id = ?", (new_total, order_id))
+    cursor.execute("UPDATE orders SET total_amount = %s WHERE id = %s", (new_total, order_id))
     sync_order_payment(conn, order_id)
     conn.commit()
+    cursor.close()
     conn.close()
     return jsonify({"success": True, "message": "Đã thêm đồ ăn thêm."})
 

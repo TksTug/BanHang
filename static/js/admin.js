@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <article class="customer-admin-item ${customer.group_type === 'vjp' ? 'vjp' : ''} ${customer.is_active ? '' : 'inactive'}">
                 <div>
                     <strong>${customer.name}</strong>
-                    <span>${customer.group_type === 'vjp' ? 'Khách VJP' : 'Khách thường'}${customer.is_active ? '' : ' - Đã ẩn'}</span>
+                    <span>${customer.group_type === 'vjp' ? 'Khách VJP' : ''}${customer.is_active ? '' : ' - Đã ẩn'}</span>
                 </div>
                 <div class="product-actions">
                     <button class="btn btn-secondary edit-customer-btn" type="button"
@@ -228,14 +228,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${itemsText}${order.note ? `<p class="order-note"><strong>Note:</strong> ${order.note}</p>` : ''}</td>
                 <td>${formatCurrency(order.total_amount)}</td>
                 <td>
-                    <input class="paid-input" type="number" min="0" max="${order.total_amount}" step="1000" value="${order.paid_amount}" data-id="${order.id}">
+                    <div class="paid-display-val"><strong>${formatCurrency(order.paid_amount)}</strong></div>
                     <div class="payment-history">${paymentsText}</div>
                 </td>
                 <td>${formatCurrency(order.remaining_amount)}</td>
                 <td><span class="status-pill ${order.status}">${statusText(order.status)}</span></td>
                 <td>
-                    <button class="btn btn-confirm add-payment-btn" type="button" data-id="${order.id}">Thêm trả</button>
-                    <button class="btn btn-secondary save-payment-btn" type="button" data-id="${order.id}">Đặt lại</button>
+                    <div class="inline-payment-row">
+                        <input type="number" class="payment-amount-input" data-id="${order.id}" min="0" step="1000" placeholder="Số tiền trả">
+                        <button class="btn btn-confirm add-payment-btn" type="button" data-id="${order.id}">Thêm trả</button>
+                    </div>
+                    ${order.status !== 'paid' ? `<button class="btn btn-primary mark-paid-btn" type="button" data-id="${order.id}">Đã thanh toán</button>` : ''}
+                    ${order.paid_amount > 0 ? `<button class="btn btn-secondary reset-paid-btn" type="button" data-id="${order.id}">Đặt lại (về 0đ)</button>` : ''}
                     <button class="btn btn-secondary edit-order-btn" type="button" data-id="${order.id}">Sửa đơn</button>
                     <button class="btn btn-danger delete-order-btn" type="button" data-id="${order.id}">Xóa</button>
                 </td>
@@ -263,14 +267,27 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const addPayment = async (orderId) => {
-        const amount = prompt('Nhập số tiền khách vừa trả:');
-        if (!amount) return;
-        const method = prompt('Hình thức trả tiền:', 'Momo') || '';
-        const note = prompt('Ghi chú:', '') || '';
+        const input = ordersTableBody.querySelector(`.payment-amount-input[data-id="${orderId}"]`);
+        const amount = parseFloat(input?.value);
+        if (!amount || amount <= 0) {
+            alert('Vui lòng nhập số tiền hợp lệ.');
+            if (input) input.focus();
+            return;
+        }
+        const order = allOrders.find((o) => String(o.id) === String(orderId));
+        if (order) {
+            const remaining = Math.max(order.total_amount - (order.paid_amount || 0), 0);
+            if (amount > remaining + 0.01) {
+                alert(`Số tiền trả (${formatCurrency(amount)}) không được vượt quá số tiền còn nợ (${formatCurrency(remaining)}).`);
+                if (input) input.focus();
+                return;
+            }
+        }
+        const method = order?.payment_method || 'Tiền mặt';
         const response = await fetch(`/api/orders/${orderId}/payments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ amount, method, note }),
+            body: JSON.stringify({ amount, method, note: '' }),
         });
         const result = await response.json();
         if (!result.success) {
@@ -462,9 +479,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = event.target;
         const orderId = target.dataset.id;
         if (target.classList.contains('add-payment-btn')) await addPayment(orderId);
-        if (target.classList.contains('save-payment-btn')) {
-            const input = ordersTableBody.querySelector(`.paid-input[data-id="${orderId}"]`);
-            await setPayment(orderId, input.value);
+        if (target.classList.contains('mark-paid-btn')) {
+            const order = allOrders.find((o) => String(o.id) === String(orderId));
+            if (order) await setPayment(orderId, order.total_amount);
+        }
+        if (target.classList.contains('reset-paid-btn')) {
+            if (confirm('Đặt lại số tiền đã trả của đơn này về 0đ?')) {
+                await setPayment(orderId, 0);
+            }
         }
         if (target.classList.contains('edit-order-btn')) openEditOrder(orderId);
         if (target.classList.contains('delete-order-btn')) {

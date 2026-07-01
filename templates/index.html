@@ -13,10 +13,13 @@
     <header class="main-header">
         <div class="container header-content">
             <div>
-                <h1>Menu Quán Ăn</h1>
-                <p id="day-status-text">Chọn tên, chọn món và đặt hàng.</p>
+                <h1>Anh Đông quán</h1>
+                <p id="day-status-text">Hôm nay cố gắng rồi, ăn gì ngon nha! .</p>
             </div>
-            <a href="/admin/login" class="admin-link">Đăng nhập admin</a>
+            <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
+                <a href="/payment" class="admin-link">Trang thanh toán</a>
+                <a href="/admin/login" class="admin-link">Đăng nhập admin</a>
+            </div>
         </div>
     </header>
 
@@ -76,6 +79,39 @@
 
     <div id="success-notification" class="notification">
         <p>Đặt hàng thành công. Cảm ơn bạn!</p>
+    </div>
+
+    <div id="edit-customer-order-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="edit-modal-title">Sửa đơn hàng</h2>
+                <button id="close-edit-modal" class="close-cart-btn" type="button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <label><strong>Đổi tên người đặt:</strong></label>
+                <select id="edit-order-customer-select"></select>
+                <label><strong>Hình thức thanh toán:</strong></label>
+                <select id="edit-order-payment-select">
+                    <option value="Tiền mặt">Tiền mặt</option>
+                    <option value="Chuyển khoản">Chuyển khoản</option>
+                    <option value="Momo">Momo</option>
+                </select>
+                <label><strong>Ghi chú:</strong></label>
+                <textarea id="edit-order-note-input" placeholder="Ghi chú cho quán"></textarea>
+                <label><strong>Chọn món:</strong></label>
+                <div id="edit-order-product-list" class="edit-product-list"></div>
+                <button id="save-edit-order-btn" class="btn btn-primary btn-block" type="button">Lưu thay đổi</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="extra-food-panel" class="extra-food-panel hidden">
+        <div class="extra-food-header">
+            <h2>🍜 Đồ ăn thêm</h2>
+            <button id="close-extra-panel" class="close-cart-btn" type="button">&times;</button>
+        </div>
+        <p class="extra-food-desc">Chọn món và giá để thêm vào đơn vừa đặt.</p>
+        <div id="extra-food-list" class="extra-food-list"></div>
     </div>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>

@@ -16,11 +16,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectedCustomerText = document.getElementById('selected-customer-text');
     const customerSummary = document.getElementById('customer-summary');
     const dayStatusText = document.getElementById('day-status-text');
+    const editModal = document.getElementById('edit-customer-order-modal');
+    const closeEditModal = document.getElementById('close-edit-modal');
+    const editModalTitle = document.getElementById('edit-modal-title');
+    const editOrderCustomerSelect = document.getElementById('edit-order-customer-select');
+    const editOrderPaymentSelect = document.getElementById('edit-order-payment-select');
+    const editOrderNoteInput = document.getElementById('edit-order-note-input');
+    const editOrderProductList = document.getElementById('edit-order-product-list');
+    const saveEditOrderBtn = document.getElementById('save-edit-order-btn');
+    const extraFoodPanel = document.getElementById('extra-food-panel');
+    const closeExtraPanel = document.getElementById('close-extra-panel');
+    const extraFoodList = document.getElementById('extra-food-list');
 
     let cart = [];
     let customers = [];
     let selectedCustomer = null;
     let isDayClosed = false;
+    let editingOrderId = null;
+    let lastOrderId = null;
+    let allProducts = [];
 
     const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
     const formatDate = (value) => value ? new Intl.DateTimeFormat('vi-VN').format(new Date(value.replace(' ', 'T'))) : '';
@@ -32,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
         customerList.innerHTML = visible.map((customer) => `
             <button class="customer-option ${customer.group_type === 'vjp' ? 'vjp' : ''} ${selectedCustomer?.id === customer.id ? 'selected' : ''}" type="button" data-id="${customer.id}">
                 <span>${customer.name}</span>
-                <small>${customer.group_type === 'vjp' ? 'Khách VJP' : 'Khách thường'}</small>
+                ${customer.group_type === 'vjp' ? '<small>Khách VJP</small>' : ''}
             </button>
         `).join('');
     };
@@ -47,15 +61,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const response = await fetch('/api/day-status');
         const data = await response.json();
         isDayClosed = Boolean(data.is_closed);
-        dayStatusText.textContent = isDayClosed ? 'Hôm nay đã chốt đơn, chỉ xem lại đơn đã đặt.' : 'Chọn tên, chọn món và đặt hàng.';
+        dayStatusText.textContent = isDayClosed ? 'Hôm nay đã chốt đơn, chỉ xem lại đơn đã đặt.' : 'Hôm nay cố gắng rồi, ăn gì ngon nha! .';
         submitOrderBtn.disabled = isDayClosed;
         submitOrderBtn.textContent = isDayClosed ? 'Đã chốt đơn hôm nay' : 'Đặt hàng';
     };
 
     const loadProducts = async () => {
         try {
-            const response = await fetch('/api/products');
+            const response = await fetch('/api/products?public=1');
             const products = await response.json();
+            allProducts = products;
             productGrid.innerHTML = '';
             if (!products.length) {
                 productGrid.innerHTML = '<p class="muted">Hôm nay chưa có món nào được mở bán.</p>';
@@ -70,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <img src="${product.image_url || 'https://via.placeholder.com/600x400.png?text=Mon+An'}" alt="${product.name}">
                     <div class="product-info">
                         <h3>${product.name}</h3>
-                        <p class="product-description">${product.description || ''}</p>
+                        <p class="product-description">${(product.description || '').trim()}</p>
                         <p class="product-price">${formatCurrency(product.price)}</p>
                         <button class="btn ${soldOut ? 'btn-secondary' : 'btn-primary'} add-to-cart-btn"
                             data-id="${product.id}" data-name="${product.name}" data-price="${product.price}" type="button" ${soldOut ? 'disabled' : ''}>
@@ -148,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
             customerSummary.innerHTML = `
                 <article class="summary-card ${result.customer.group_type === 'vjp' ? 'vjp' : ''}">
                     <strong>${result.customer.name}</strong>
-                    <span>${result.customer.group_type === 'vjp' ? 'Khách VJP' : 'Khách thường'}</span>
+                    <span>${result.customer.group_type === 'vjp' ? 'Khách VJP' : ''}</span>
                     <div class="summary-grid">
                         <div><small>Tổng mua</small><b>${formatCurrency(summary.total_amount)}</b></div>
                         <div><small>Đã trả</small><b>${formatCurrency(summary.paid_amount)}</b></div>
@@ -169,6 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span>Tổng: ${formatCurrency(order.total_amount)}</span>
                             <span>Còn thiếu: ${formatCurrency(order.remaining_amount)}</span>
                         </div>
+                        ${order.status === 'unpaid' ? `<div class="order-actions-row"><button class="btn btn-secondary edit-my-order-btn" data-id="${order.id}" type="button">✏️ Sửa đơn</button><button class="btn btn-confirm add-extra-food-btn" data-id="${order.id}" type="button">🍜 Thêm đồ ăn</button></div>` : ''}
                     </article>
                 `).join('') : '<p class="muted">Bạn chưa có đơn nào.</p>'}
             `;
@@ -176,6 +192,84 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Lỗi khi tải tổng kết:', error);
             customerSummary.innerHTML = '<p class="muted">Không thể tải tổng kết. Vui lòng thử lại.</p>';
         }
+    };
+
+    const openEditOrderModal = (orderId) => {
+        editingOrderId = orderId;
+        editModalTitle.textContent = `Sửa đơn #${orderId}`;
+        editOrderCustomerSelect.innerHTML = customers.map((c) => `<option value="${c.id}" ${selectedCustomer?.id === c.id ? 'selected' : ''}>${c.group_type === 'vjp' ? '★ ' : ''}${c.name}</option>`).join('');
+        fetch(`/api/customer-orders?customer_id=${selectedCustomer?.id}`).then(r => r.json()).then(allOrders => {
+            const order = allOrders.find((o) => String(o.id) === String(orderId));
+            if (!order) { alert('Không tìm thấy đơn.'); return; }
+            editOrderPaymentSelect.value = order.payment_method || 'Tiền mặt';
+            editOrderNoteInput.value = order.note || '';
+            editOrderProductList.innerHTML = allProducts.map((product) => {
+                const existing = order.items.find((item) => item.product_id === product.id);
+                return `<label class="edit-product-item"><span>${product.name} (${formatCurrency(product.price)})</span><input type="number" min="0" step="1" value="${existing ? existing.quantity : 0}" data-product-id="${product.id}"></label>`;
+            }).join('');
+            editModal.classList.remove('hidden');
+        });
+    };
+
+    const saveEditedCustomerOrder = async () => {
+        if (!editingOrderId) return;
+        const items = [...editOrderProductList.querySelectorAll('input')]
+            .map((input) => ({ id: input.dataset.productId, quantity: Number(input.value) }))
+            .filter((item) => item.quantity > 0);
+        if (!items.length) { alert('Vui lòng chọn ít nhất một món.'); return; }
+        const response = await fetch(`/api/customer-orders/${editingOrderId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                customer_id: editOrderCustomerSelect.value,
+                payment_method: editOrderPaymentSelect.value,
+                note: editOrderNoteInput.value.trim(),
+                items,
+            }),
+        });
+        const result = await response.json();
+        if (!result.success) { alert(result.message || 'Không thể sửa đơn.'); return; }
+        editModal.classList.add('hidden');
+        editingOrderId = null;
+        await loadCustomerSummary();
+    };
+
+    const openExtraFoodPanel = (orderId) => {
+        lastOrderId = orderId;
+        renderExtraFoodList();
+        extraFoodPanel.classList.remove('hidden');
+        extraFoodPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    const renderExtraFoodList = () => {
+        extraFoodList.innerHTML = allProducts.map((product) => `
+            <div class="extra-food-item">
+                <strong>${product.name}</strong>
+                <div class="extra-price-buttons">
+                    <button class="btn btn-sm btn-quick-price" data-name="${product.name}" data-price="5000" type="button">5k</button>
+                    <button class="btn btn-sm btn-quick-price" data-name="${product.name}" data-price="10000" type="button">10k</button>
+                    <button class="btn btn-sm btn-quick-price" data-name="${product.name}" data-price="15000" type="button">15k</button>
+                    <button class="btn btn-sm btn-quick-price" data-name="${product.name}" data-price="20000" type="button">20k</button>
+                    <div class="custom-price-row">
+                        <input type="number" class="custom-price-input" data-name="${product.name}" min="0" step="1000" placeholder="Giá khác">
+                        <button class="btn btn-sm btn-confirm add-custom-extra" data-name="${product.name}" type="button">Thêm</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    };
+
+    const addExtraFood = async (productName, price) => {
+        if (!lastOrderId) { alert('Không tìm thấy đơn hàng.'); return; }
+        const response = await fetch(`/api/orders/${lastOrderId}/extra`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_name: productName, price }),
+        });
+        const result = await response.json();
+        if (!result.success) { alert(result.message || 'Không thể thêm đồ ăn.'); return; }
+        alert(`Đã thêm ${productName} (${formatCurrency(price)}) vào đơn!`);
+        await loadCustomerSummary();
     };
 
     const handleOrderSubmit = async (event) => {
@@ -208,19 +302,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert(result.message || 'Không thể đặt hàng.');
                 return;
             }
+            lastOrderId = result.order_id;
             showNotification();
             await loadCustomerSummary();
             cart = [];
             updateCart();
             orderForm.reset();
             toggleCart();
+            renderExtraFoodList();
+            extraFoodPanel.classList.remove('hidden');
+            setTimeout(() => extraFoodPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
         } catch (error) {
             console.error('Lỗi khi đặt hàng:', error);
             alert('Không thể kết nối máy chủ để đặt hàng.');
         }
     };
 
-    customerSearch.addEventListener('input', renderCustomerList);
+    customerSearch.addEventListener('input', () => {
+        customerList.classList.add('active');
+        renderCustomerList();
+    });
+    customerSearch.addEventListener('focus', () => {
+        customerList.classList.add('active');
+    });
+    // Đóng danh sách khi click ra ngoài
+    document.addEventListener('click', (event) => {
+        if (!customerSearch.contains(event.target) && !customerList.contains(event.target)) {
+            customerList.classList.remove('active');
+        }
+    });
+
     customerList.addEventListener('click', (event) => {
         const option = event.target.closest('.customer-option');
         if (!option) return;
@@ -229,6 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedCustomerText.className = `muted selected-name ${selectedCustomer.group_type === 'vjp' ? 'vjp' : ''}`;
         renderCustomerList();
         loadCustomerSummary();
+        customerList.classList.remove('active'); // Đóng sau khi chọn
     });
 
     cartFab.addEventListener('click', toggleCart);
@@ -242,6 +354,32 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.target.classList.contains('remove-item-btn')) removeFromCart(event.target.dataset.id);
     });
     orderForm.addEventListener('submit', handleOrderSubmit);
+
+    closeEditModal.addEventListener('click', () => { editModal.classList.add('hidden'); editingOrderId = null; });
+    editModal.addEventListener('click', (e) => { if (e.target === editModal) { editModal.classList.add('hidden'); editingOrderId = null; } });
+    saveEditOrderBtn.addEventListener('click', saveEditedCustomerOrder);
+    closeExtraPanel.addEventListener('click', () => extraFoodPanel.classList.add('hidden'));
+
+    customerSummary.addEventListener('click', (event) => {
+        const editBtn = event.target.closest('.edit-my-order-btn');
+        const extraBtn = event.target.closest('.add-extra-food-btn');
+        if (editBtn) openEditOrderModal(editBtn.dataset.id);
+        if (extraBtn) openExtraFoodPanel(extraBtn.dataset.id);
+    });
+
+    extraFoodList.addEventListener('click', (event) => {
+        const quickBtn = event.target.closest('.btn-quick-price');
+        const customBtn = event.target.closest('.add-custom-extra');
+        if (quickBtn) {
+            addExtraFood(quickBtn.dataset.name, parseFloat(quickBtn.dataset.price));
+        }
+        if (customBtn) {
+            const input = customBtn.closest('.custom-price-row')?.querySelector('.custom-price-input');
+            const price = parseFloat(input?.value);
+            if (!price || price <= 0) { alert('Vui lòng nhập giá hợp lệ.'); return; }
+            addExtraFood(customBtn.dataset.name, price);
+        }
+    });
 
     Promise.all([loadDayStatus(), loadCustomers(), loadProducts()]);
     updateCart();

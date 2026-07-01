@@ -156,6 +156,11 @@ def customer_page():
     return render_template("index.html")
 
 
+@app.route("/payment")
+def public_payment_page():
+    return render_template("payment.html")
+
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     error = None
@@ -279,7 +284,8 @@ def update_customer(customer_id):
 @app.route("/api/products", methods=["GET"])
 def get_products():
     conn = get_db_conn()
-    if session.get("admin_logged_in"):
+    public_only = request.args.get("public") == "1"
+    if not public_only and session.get("admin_logged_in"):
         products = conn.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
     else:
         products = conn.execute("SELECT * FROM products WHERE is_available = 1 ORDER BY is_sold_out ASC, id DESC").fetchall()
@@ -337,11 +343,11 @@ def update_product(product_id):
     cursor.execute(
         """
         UPDATE products
-        SET name = ?, price = ?, image_url = COALESCE(NULLIF(?, ''), image_url),
+        SET name = ?, price = ?, image_url = ?,
             description = ?, is_available = ?, is_sold_out = ?
         WHERE id = ?
         """,
-        (name, price, uploaded_url or image_url, description, is_available, is_sold_out, product_id),
+        (name, price, uploaded_url if uploaded_url else image_url, description, is_available, is_sold_out, product_id),
     )
     conn.commit()
     updated = cursor.rowcount
@@ -628,6 +634,38 @@ def get_order_matrix():
     return jsonify({"dates": dates, "customers": list(customers.values())})
 
 
+@app.route("/api/public-debt", methods=["GET"])
+def get_public_debt():
+    conn = get_db_conn()
+    orders = conn.execute(
+        """
+        SELECT o.id, o.customer_name, o.total_amount, o.paid_amount, c.group_type
+        FROM orders o
+        LEFT JOIN customers c ON c.id = o.customer_id
+        ORDER BY o.customer_name ASC
+        """
+    ).fetchall()
+    conn.close()
+    
+    customers = {}
+    for order in orders:
+        order_data = order_to_dict(order)
+        customer = customers.setdefault(
+            order["customer_name"],
+            {"customer_name": order["customer_name"], "group_type": order["group_type"] or "regular", "total_debt": 0}
+        )
+        customer["total_debt"] += order_data["remaining_amount"]
+        
+    debt_list = list(customers.values())
+    # Sắp xếp VJP lên đầu, sau đó đến người còn nợ nhiều, người hết nợ (0đ) xếp cuối cùng
+    debt_list.sort(key=lambda x: (
+        0 if x["group_type"] == 'vjp' else 1,
+        0 if x["total_debt"] > 0 else 1,
+        -x["total_debt"]
+    ))
+    return jsonify(debt_list)
+
+
 @app.route("/api/dashboard-stats", methods=["GET"])
 @api_admin_required
 def get_dashboard_stats():
@@ -642,6 +680,85 @@ def get_dashboard_stats():
     ).fetchone()
     conn.close()
     return jsonify(dict(row))
+
+
+@app.route("/api/customer-orders/<int:order_id>", methods=["PUT"])
+def update_customer_order(order_id):
+    data = request.get_json() or {}
+    conn = get_db_conn()
+    order = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+    if not order:
+        conn.close()
+        return jsonify({"success": False, "message": "Không tìm thấy đơn hàng."}), 404
+    if float(order["paid_amount"] or 0) > 0:
+        conn.close()
+        return jsonify({"success": False, "message": "Đơn đã thanh toán, không thể sửa."}), 400
+    customer_id = data.get("customer_id")
+    items = data.get("items", [])
+    note = (data.get("note") or "").strip()
+    customer = conn.execute("SELECT id, name FROM customers WHERE id = ? AND is_active = 1", (customer_id,)).fetchone()
+    if not customer or not items:
+        conn.close()
+        return jsonify({"success": False, "message": "Vui lòng chọn tên và ít nhất một món."}), 400
+    total_amount, saved_items = calculate_items_total(conn, items, public_only=False)
+    if not saved_items:
+        conn.close()
+        return jsonify({"success": False, "message": "Đơn cần ít nhất một món hợp lệ."}), 400
+    payment_method = data.get("payment_method") or order["payment_method"]
+    conn.execute(
+        "UPDATE orders SET customer_id = ?, customer_name = ?, payment_method = ?, note = ?, total_amount = ? WHERE id = ?",
+        (customer["id"], customer["name"], payment_method, note, total_amount, order_id),
+    )
+    conn.execute("DELETE FROM order_items WHERE order_id = ?", (order_id,))
+    conn.executemany(
+        "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (?, ?, ?, ?, ?)",
+        [(order_id, pid, name, price, qty) for pid, name, price, qty in saved_items],
+    )
+    sync_order_payment(conn, order_id)
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "message": "Đã cập nhật đơn hàng."})
+
+
+@app.route("/api/orders/<int:order_id>/extra", methods=["POST"])
+def add_extra_item(order_id):
+    data = request.get_json() or {}
+    product_name = (data.get("product_name") or "").strip()
+    try:
+        price = float(data.get("price"))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "Giá không hợp lệ."}), 400
+    if not product_name or price <= 0:
+        return jsonify({"success": False, "message": "Vui lòng chọn món và giá hợp lệ."}), 400
+    conn = get_db_conn()
+    order = conn.execute("SELECT id, total_amount FROM orders WHERE id = ?", (order_id,)).fetchone()
+    if not order:
+        conn.close()
+        return jsonify({"success": False, "message": "Không tìm thấy đơn hàng."}), 404
+    product = conn.execute("SELECT id FROM products WHERE lower(name) = lower(?)", (product_name,)).fetchone()
+    product_id = product["id"] if product else None
+    
+    target_name = product_name + " (thêm)"
+    existing_item = conn.execute(
+        "SELECT id, quantity FROM order_items WHERE order_id = ? AND product_name = ? AND price = ?",
+        (order_id, target_name, price)
+    ).fetchone()
+    
+    if existing_item:
+        new_qty = existing_item["quantity"] + 1
+        conn.execute("UPDATE order_items SET quantity = ? WHERE id = ?", (new_qty, existing_item["id"]))
+    else:
+        conn.execute(
+            "INSERT INTO order_items (order_id, product_id, product_name, price, quantity) VALUES (?, ?, ?, ?, 1)",
+            (order_id, product_id, target_name, price),
+        )
+    
+    new_total = float(order["total_amount"]) + price
+    conn.execute("UPDATE orders SET total_amount = ? WHERE id = ?", (new_total, order_id))
+    sync_order_payment(conn, order_id)
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "message": "Đã thêm đồ ăn thêm."})
 
 
 if __name__ == "__main__":

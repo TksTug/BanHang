@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thanh toán & Công nợ - Anh Đông quán</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <style>
+        .payment-container {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 40px;
+            align-items: start;
+            margin-top: 20px;
+        }
+        .qr-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: var(--shadow);
+        }
+        .qr-image {
+            max-width: 320px;
+            width: 100%;
+            border-radius: var(--border-radius);
+            border: 4px solid var(--primary-color);
+            box-shadow: var(--shadow-hover);
+            margin-bottom: 20px;
+        }
+        .debt-section {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: var(--shadow);
+        }
+        .debt-list {
+            display: grid;
+            gap: 12px;
+            margin-top: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        .debt-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 18px;
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+            background: #fdfdfd;
+            transition: var(--transition);
+        }
+        .debt-item:hover {
+            transform: translateX(4px);
+            border-color: var(--primary-color);
+        }
+        .debt-item.vjp {
+            background: linear-gradient(135deg, #fffbf0 0%, #fff6d6 100%);
+            border: 1.5px solid var(--primary-color);
+        }
+        .debt-name {
+            font-weight: 700;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .vjp-badge {
+            color: var(--primary-dark);
+            font-size: 0.75rem;
+            background: rgba(212, 175, 55, 0.2);
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-weight: 800;
+        }
+        .debt-val {
+            font-weight: 800;
+            font-size: 1.2rem;
+            color: var(--red-color);
+        }
+        .no-debt-msg {
+            text-align: center;
+            color: var(--green-color);
+            font-weight: 700;
+            padding: 40px 0;
+            font-size: 1.2rem;
+        }
+        @media (max-width: 800px) {
+            .payment-container {
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="main-header">
+        <div class="container header-content">
+            <div>
+                <h1>Anh Đông quán</h1>
+                <p>Thông tin thanh toán chuyển khoản và danh sách thanh toán của mọi người</p>
+            </div>
+            <div class="header-actions">
+                <a href="/" class="admin-link">Trang đặt món</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="payment-container">
+            <!-- Cột 1: Mã QR chuyển khoản -->
+            <section class="qr-section">
+                <h2>Mã QR Thanh Toán</h2>
+                <p class="muted" style="margin-bottom: 20px;">Quét mã dưới đây để chuyển khoản thanh toán nhanh</p>
+                <!-- Dùng hình ảnh QR Momo của bạn -->
+                <img class="qr-image" src="{{ url_for('static', filename='uploads/momo_qr.png') }}" alt="Mã QR Chuyển Khoản Momo" id="qr-img-tag">
+                <div style="font-size: 1.05rem; line-height: 1.8;">
+                    <strong>Phương thức:</strong> Quét mã MoMo / VietQR<br>
+                    <strong>Nội dung chuyển khoản:</strong> <span style="color: var(--red-color); font-weight: 700;">[Tên của bạn] thanh toán</span>
+                </div>
+            </section>
+
+            <!-- Cột 2: Danh sách số tiền còn nợ -->
+            <section class="debt-section">
+                <h2>Danh sách thanh toán</h2>
+                <p class="muted">Danh sách tự động cập nhật tình trạng thanh toán của mọi người</p>
+                
+                <div id="public-debt-list" class="debt-list">
+                    <p class="muted text-center">Đang tải danh sách...</p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
+
+        const loadPublicDebt = async () => {
+            const container = document.getElementById('public-debt-list');
+            try {
+                const response = await fetch('/api/public-debt');
+                const list = await response.json();
+                
+                if (!list.length) {
+                    container.innerHTML = `<div class="no-debt-msg">🎉 Chưa có dữ liệu thanh toán nào.</div>`;
+                    return;
+                }
+
+                container.innerHTML = list.map(item => {
+                    const isPaid = item.total_debt <= 0;
+                    const valStyle = isPaid ? 'color: var(--green-color); font-weight: 700;' : 'color: var(--red-color);';
+                    const displayVal = isPaid ? 'Đã trả đủ (0đ)' : formatCurrency(item.total_debt);
+                    return `
+                        <div class="debt-item ${item.group_type === 'vjp' ? 'vjp' : ''}">
+                            <div class="debt-name">
+                                ${item.group_type === 'vjp' ? '★ ' : ''}${item.customer_name}
+                                ${item.group_type === 'vjp' ? '<span class="vjp-badge">Khách VJP</span>' : ''}
+                            </div>
+                            <div class="debt-val" style="${valStyle}">${displayVal}</div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Lỗi khi tải danh sách công nợ:', error);
+                container.innerHTML = `<p class="muted">Không thể tải danh sách lúc này. Vui lòng tải lại trang.</p>`;
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadPublicDebt();
+        });
+    </script>
+</body>
+</html>

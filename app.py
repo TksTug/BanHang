@@ -92,6 +92,15 @@ def order_to_dict(order):
     data["remaining_amount"] = max(data["total_amount"] - data["paid_amount"], 0)
     data["note"] = data.get("note") or ""
     data["status"] = order_status(data)
+    
+    # Chuyển đổi created_at datetime sang string để tránh lỗi JSON serializable
+    if "created_at" in data and data["created_at"]:
+        created_at_val = data["created_at"]
+        if hasattr(created_at_val, "isoformat"):
+            data["created_at"] = created_at_val.isoformat()
+        else:
+            data["created_at"] = str(created_at_val)
+            
     return data
 
 
@@ -140,7 +149,15 @@ def get_order_payments(conn, order_id):
     )
     payments = cursor.fetchall()
     cursor.close()
-    return [dict(payment) for payment in payments]
+    
+    result = []
+    for payment in payments:
+        p_dict = dict(payment)
+        if "created_at" in p_dict and p_dict["created_at"]:
+            c_val = p_dict["created_at"]
+            p_dict["created_at"] = c_val.isoformat() if hasattr(c_val, "isoformat") else str(c_val)
+        result.append(p_dict)
+    return result
 
 
 def calculate_items_total(conn, items, public_only=True):

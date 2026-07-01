@@ -5,10 +5,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# Supabase PostgreSQL connection URL configuration
+# Supabase PostgreSQL connection URL configuration (Sử dụng Connection Pooler hỗ trợ IPv4 trên Render)
 DB_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://postgres:thanhtung1809@db.stdpwepddxysbxrnfczr.supabase.co:5432/postgres"
+    "postgresql://postgres.stdpwepddxysbxrnfczr:tung1809%40%40@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?sslmode=require"
 )
 
 def get_db_conn():
@@ -16,11 +16,11 @@ def get_db_conn():
     if db_url:
         return psycopg2.connect(db_url)
     
-    host = os.environ.get("DB_HOST", "db.stdpwepddxysbxrnfczr.supabase.co")
-    port = os.environ.get("DB_PORT", "5432")
+    host = os.environ.get("DB_HOST", "aws-0-ap-northeast-1.pooler.supabase.com")
+    port = os.environ.get("DB_PORT", "6543")
     dbname = os.environ.get("DB_NAME", "postgres")
-    user = os.environ.get("DB_USER", "postgres")
-    password = os.environ.get("DB_PASSWORD", "thanhtung1809")
+    user = os.environ.get("DB_USER", "postgres.stdpwepddxysbxrnfczr")
+    password = os.environ.get("DB_PASSWORD", "tung1809@@")
     
     return psycopg2.connect(
         host=host,

@@ -106,7 +106,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="product-actions">
                     <button class="btn btn-secondary edit-customer-btn" type="button"
                         data-id="${customer.id}" data-name="${customer.name}" data-group="${customer.group_type}" data-active="${customer.is_active ? '1' : '0'}">Sửa</button>
-                    <button class="btn btn-danger delete-customer-btn" type="button" data-id="${customer.id}">Ẩn</button>
+                    <button class="btn ${customer.is_active ? 'btn-danger' : 'btn-confirm'} toggle-customer-btn" type="button" data-id="${customer.id}" data-active="${customer.is_active ? '1' : '0'}">
+                        ${customer.is_active ? 'Ẩn' : 'Bật'}
+                    </button>
                 </div>
             </article>
         `).join('');
@@ -436,16 +438,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     customerAdminList.addEventListener('click', async (event) => {
         const editBtn = event.target.closest('.edit-customer-btn');
-        const deleteBtn = event.target.closest('.delete-customer-btn');
+        const toggleBtn = event.target.closest('.toggle-customer-btn');
         if (editBtn) {
             customerId.value = editBtn.dataset.id;
             customerName.value = editBtn.dataset.name;
             customerGroup.value = editBtn.dataset.group;
             customerActive.checked = editBtn.dataset.active === '1';
         }
-        if (deleteBtn) {
-            if (!confirm('Ẩn khách này khỏi danh sách đặt món?')) return;
-            await fetch(`/api/customers/${deleteBtn.dataset.id}`, { method: 'DELETE' });
+        if (toggleBtn) {
+            const isActive = toggleBtn.dataset.active === '1';
+            const actionText = isActive ? 'Ẩn khách này khỏi danh sách đặt món?' : 'Cho phép khách này đặt món trở lại?';
+            if (!confirm(actionText)) return;
+            await fetch(`/api/customers/${toggleBtn.dataset.id}/toggle-active`, { method: 'POST' });
             await loadCustomers();
         }
     });

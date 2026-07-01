@@ -254,15 +254,22 @@ def create_customer():
     return jsonify({"success": True, "id": customer_id})
 
 
-@app.route("/api/customers/<int:customer_id>", methods=["PUT", "DELETE"])
+@app.route("/api/customers/<int:customer_id>/toggle-active", methods=["POST"])
+@api_admin_required
+def toggle_customer_active(customer_id):
+    conn = get_db_conn()
+    customer = conn.execute("SELECT is_active FROM customers WHERE id = ?", (customer_id,)).fetchone()
+    if not customer:
+        conn.close()
+        return jsonify({"success": False, "message": "Không tìm thấy khách."}), 404
+    new_status = 0 if customer["is_active"] else 1
+    conn.execute("UPDATE customers SET is_active = ? WHERE id = ?", (new_status, customer_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "is_active": new_status})
+@app.route("/api/customers/<int:customer_id>", methods=["PUT"])
 @api_admin_required
 def update_customer(customer_id):
-    conn = get_db_conn()
-    if request.method == "DELETE":
-        conn.execute("UPDATE customers SET is_active = 0 WHERE id = ?", (customer_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True})
     data = request.get_json() or {}
     name = data.get("name", "").strip()
     group_type = "vjp" if data.get("group_type") == "vjp" else "regular"

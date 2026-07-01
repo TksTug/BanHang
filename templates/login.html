@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng nhập admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="login-body">
+    <main class="login-shell">
+        <form method="post" class="login-card">
+            <h1>Đăng nhập admin</h1>
+            {% if error %}
+                <p class="form-error">{{ error }}</p>
+            {% endif %}
+            <input type="text" name="username" placeholder="Tài khoản" required autofocus autocomplete="username">
+            <input type="password" name="password" placeholder="Mật khẩu" required autocomplete="current-password">
+            <button type="submit" class="btn btn-primary btn-block">Đăng nhập</button>
+            <a href="/" class="back-link">Quay lại trang đặt món</a>
+        </form>
+    </main>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Quản lý quán ăn</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="admin-body">
+    <header class="main-header">
+        <div class="container header-content">
+            <div>
+                <h1>Dashboard Admin</h1>
+                <p>Quản lý khách, món bán, đơn hàng và công nợ.</p>
+            </div>
+            <div class="header-actions">
+                <button id="day-toggle-btn" class="admin-link inline-link header-button" type="button">Đang tải...</button>
+                <a href="/" class="admin-link inline-link">Trang đặt món</a>
+                <a href="/admin/logout" class="admin-link inline-link">Đăng xuất</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container admin-layout">
+        <section class="stats-section">
+            <div class="stat-card stat-card-revenue">
+                <h2>Tổng tiền đã thu</h2>
+                <p id="total-revenue">0 VNĐ</p>
+            </div>
+            <div class="stat-card stat-card-debt">
+                <h2>Tổng tiền còn nợ</h2>
+                <p id="outstanding-debt">0 VNĐ</p>
+            </div>
+            <div class="stat-card stat-card-orders">
+                <h2>Số đơn hàng</h2>
+                <p id="order-count">0</p>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <h2>Danh sách khách</h2>
+            </div>
+            <form id="customer-form" class="compact-form">
+                <input type="hidden" id="customer-id">
+                <input type="text" id="customer-name" placeholder="Tên khách" required>
+                <select id="customer-group">
+                    <option value="regular">Khách thường</option>
+                    <option value="vjp">Khách VJP</option>
+                </select>
+                <label class="check-row small-check">
+                    <input type="checkbox" id="customer-active" checked>
+                    <span>Đang dùng</span>
+                </label>
+                <button type="submit" class="btn btn-primary">Lưu khách</button>
+                <button id="reset-customer-form" type="button" class="btn btn-secondary">Mới</button>
+            </form>
+            <div id="customer-admin-list" class="customer-admin-list"></div>
+        </section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <h2>Bảng theo ngày</h2>
+            </div>
+            <div class="sheet-container">
+                <table id="matrix-table" class="sheet-table">
+                    <thead id="matrix-head"></thead>
+                    <tbody id="matrix-body"></tbody>
+                </table>
+                <p id="no-matrix-message" class="hidden">Chưa có dữ liệu đặt món.</p>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <h2>Kho món ăn</h2>
+                <button id="reset-product-form" class="btn btn-secondary" type="button">Thêm món mới</button>
+            </div>
+            <form id="product-form" class="product-form" enctype="multipart/form-data">
+                <input type="hidden" id="product-id">
+                <input type="text" id="product-name" name="name" placeholder="Tên món" required>
+                <input type="number" id="product-price" name="price" placeholder="Giá" min="0" step="1000" required>
+                <input type="text" id="product-image-url" name="image_url" placeholder="Link ảnh nếu không upload">
+                <input type="file" id="product-image" name="image" accept="image/*">
+                <textarea id="product-description" name="description" placeholder="Mô tả ngắn"></textarea>
+                <label class="check-row">
+                    <input type="checkbox" id="product-available">
+                    <span>Hiển thị bên trang đặt món hôm nay</span>
+                </label>
+                <label class="check-row">
+                    <input type="checkbox" id="product-sold-out">
+                    <span>Đánh dấu hết món</span>
+                </label>
+                <button type="submit" class="btn btn-primary btn-block">Lưu món</button>
+            </form>
+            <div id="admin-product-list" class="admin-product-list"></div>
+        </section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <h2>Chi tiết đơn hàng</h2>
+            </div>
+            <div class="filter-bar">
+                <input type="search" id="order-search" placeholder="Tìm theo tên hoặc món">
+                <input type="date" id="order-date-filter">
+                <select id="order-status-filter">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="unpaid">Chưa trả</option>
+                    <option value="partial">Trả một phần</option>
+                    <option value="paid">Đã trả hết</option>
+                </select>
+            </div>
+            <div class="table-container">
+                <table id="orders-table">
+                    <thead>
+                        <tr>
+                            <th>Ngày</th>
+                            <th>Người đặt</th>
+                            <th>Món đã mua</th>
+                            <th>Tổng tiền</th>
+                            <th>Đã trả</th>
+                            <th>Còn nợ</th>
+                            <th>Trạng thái</th>
+                            <th>Cập nhật</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orders-table-body"></tbody>
+                </table>
+                <p id="no-orders-message" class="hidden">Chưa có đơn hàng nào.</p>
+            </div>
+        </section>
+
+        <section id="edit-order-panel" class="panel hidden">
+            <div class="section-heading">
+                <h2 id="edit-order-title">Sửa đơn</h2>
+                <button id="cancel-edit-order" class="btn btn-secondary" type="button">Đóng</button>
+            </div>
+            <form id="edit-order-form" class="edit-order-form">
+                <input type="hidden" id="edit-order-id">
+                <select id="edit-order-customer" required></select>
+                <select id="edit-order-payment-method" required>
+                    <option value="Tiền mặt">Tiền mặt</option>
+                    <option value="Chuyển khoản">Chuyển khoản</option>
+                    <option value="Momo">Momo</option>
+                </select>
+                <div id="edit-order-items" class="edit-order-items"></div>
+                <button type="submit" class="btn btn-primary btn-block">Lưu đơn</button>
+            </form>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+</body>
+</html>

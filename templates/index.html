@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quán ăn - Đặt món</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container header-content">
+            <div>
+                <h1>Menu Quán Ăn</h1>
+                <p id="day-status-text">Chọn tên, chọn món và đặt hàng.</p>
+            </div>
+            <a href="/admin/login" class="admin-link">Đăng nhập admin</a>
+        </div>
+    </header>
+
+    <main class="container page-grid">
+        <section>
+            <div class="section-heading">
+                <h2>Món đang bán</h2>
+            </div>
+            <div id="product-grid" class="product-grid"></div>
+        </section>
+
+        <aside class="order-lookup">
+            <h2>Tên người đặt</h2>
+            <div class="customer-picker">
+                <input type="search" id="customer-search" placeholder="Tìm tên của bạn">
+                <div id="customer-list" class="customer-list"></div>
+                <p id="selected-customer-text" class="muted">Chưa chọn tên.</p>
+            </div>
+
+            <h2>Tổng kết cá nhân</h2>
+            <div id="customer-summary" class="customer-orders">
+                <p class="muted">Chọn tên để xem tổng nợ, đơn đã đặt và lịch sử trả tiền.</p>
+            </div>
+        </aside>
+    </main>
+
+    <div id="cart-drawer" class="cart-drawer">
+        <div class="cart-header">
+            <h2>Giỏ hàng</h2>
+            <button id="close-cart-btn" class="close-cart-btn" type="button">&times;</button>
+        </div>
+        <div id="cart-items" class="cart-items">
+            <p class="cart-empty-msg">Giỏ hàng đang trống.</p>
+        </div>
+        <div class="cart-footer">
+            <div class="cart-total">
+                <strong>Tổng cộng:</strong>
+                <span id="cart-total-amount">0 VNĐ</span>
+            </div>
+            <form id="order-form" class="order-form">
+                <select id="payment-method" required>
+                    <option value="" disabled selected>Chọn hình thức thanh toán</option>
+                    <option value="Tiền mặt">Tiền mặt</option>
+                    <option value="Chuyển khoản">Chuyển khoản</option>
+                    <option value="Momo">Momo</option>
+                </select>
+                <textarea id="order-note" placeholder="Ghi chú cho quán, ví dụ: ít cay, không hành, giao sau 12h..."></textarea>
+                <button type="submit" id="submit-order-btn" class="btn btn-primary btn-block">Đặt hàng</button>
+            </form>
+        </div>
+    </div>
+
+    <button id="cart-fab" class="cart-fab" type="button" aria-label="Mở giỏ hàng">
+        🛒
+        <span id="cart-item-count">0</span>
+    </button>
+
+    <div id="success-notification" class="notification">
+        <p>Đặt hàng thành công. Cảm ơn bạn!</p>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

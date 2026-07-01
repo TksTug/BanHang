@@ -2,7 +2,7 @@ from datetime import date
 from functools import wraps
 from pathlib import Path
 from uuid import uuid4
-import sqlite3
+import libsql
 import os
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -29,10 +29,15 @@ app.secret_key = "quan-an-admin-secret-key"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+import libsql
+
+DB_URL = os.environ.get("TURSO_DATABASE_URL", "libsql://banhang-tungvt.turso.io")
+DB_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "eyJhbGciOiJFUzI1NiIsImtpZCI6ImtleS0xIn0.eyJnZW5lcmF0ZWRieSI6ImRhc2hib2FyZCIsInN1YiI6ImJhbGhhbmctdHVuZ3Z0IiwidHlwZSI6ImFjY2Vzc190b2tlbiJ9.T8aE2_rW-jCpl92v_Jc_y0Z5h9g1N4z9v-bA4h4")
+
 def get_db_conn():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn = libsql.connect(database=DB_URL, auth_token=DB_TOKEN)
+    # Libsql kết nối hỗ trợ trực tiếp cú pháp Row factory
+    conn.row_factory = libsql.Row
     return conn
 
 
@@ -261,7 +266,7 @@ def create_customer():
     try:
         cursor = conn.execute("INSERT INTO customers (name, group_type, is_active) VALUES (?, ?, 1)", (name, group_type))
         conn.commit()
-    except sqlite3.IntegrityError:
+    except libsql.IntegrityError:
         conn.close()
         return jsonify({"success": False, "message": "Tên khách đã tồn tại."}), 400
     customer_id = cursor.lastrowid
@@ -297,7 +302,7 @@ def update_customer(customer_id):
         conn.execute("UPDATE customers SET name = ?, group_type = ?, is_active = ? WHERE id = ?", (name, group_type, is_active, customer_id))
         conn.execute("UPDATE orders SET customer_name = ? WHERE customer_id = ?", (name, customer_id))
         conn.commit()
-    except sqlite3.IntegrityError:
+    except libsql.IntegrityError:
         conn.close()
         return jsonify({"success": False, "message": "Tên khách đã tồn tại."}), 400
     conn.close()

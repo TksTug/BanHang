@@ -1,4 +1,4 @@
-import sqlite3
+import libsql
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -39,10 +39,15 @@ def _ensure_product(cursor, name, price, description="", is_available=0):
     return cursor.lastrowid
 
 
+import libsql
+import os
+
+DB_URL = os.environ.get("TURSO_DATABASE_URL", "libsql://banhang-tungvt.turso.io")
+DB_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "eyJhbGciOiJFUzI1NiIsImtpZCI6ImtleS0xIn0.eyJnZW5lcmF0ZWRieSI6ImRhc2hib2FyZCIsInN1YiI6ImJhbGhhbmctdHVuZ3Z0IiwidHlwZSI6ImFjY2Vzc190b2tlbiJ9.T8aE2_rW-jCpl92v_Jc_y0Z5h9g1N4z9v-bA4h4")
+
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = libsql.connect(database=DB_URL, auth_token=DB_TOKEN)
     cursor = conn.cursor()
-    cursor.execute("PRAGMA foreign_keys = ON")
 
     cursor.execute(
         """

@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent
 # Supabase PostgreSQL connection URL configuration
 DB_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://postgres:thanhtung1809@db.supabase.co:5432/postgres"
+    "postgresql://postgres:thanhtung1809@db.stdpwepddxysbxrnfczr.supabase.co:5432/postgres"
 )
 
 def get_db_conn():
@@ -16,7 +16,7 @@ def get_db_conn():
     if db_url:
         return psycopg2.connect(db_url)
     
-    host = os.environ.get("DB_HOST", "db.supabase.co")
+    host = os.environ.get("DB_HOST", "db.stdpwepddxysbxrnfczr.supabase.co")
     port = os.environ.get("DB_PORT", "5432")
     dbname = os.environ.get("DB_NAME", "postgres")
     user = os.environ.get("DB_USER", "postgres")

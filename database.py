@@ -61,6 +61,10 @@ def init_db():
         """
     )
 
+    customer_columns = _column_names(cursor, "customers")
+    if "initial_debt" not in customer_columns:
+        cursor.execute("ALTER TABLE customers ADD COLUMN initial_debt REAL DEFAULT 0")
+
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS products (

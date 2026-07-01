@@ -236,7 +236,7 @@ def get_customers():
     if not active_only and session.get("admin_logged_in"):
         rows = conn.execute(
             """
-            SELECT id, name, group_type, is_active, created_at
+            SELECT id, name, group_type, is_active, initial_debt, created_at
             FROM customers
             ORDER BY CASE group_type WHEN 'vjp' THEN 0 ELSE 1 END, name COLLATE NOCASE
             """
@@ -244,7 +244,7 @@ def get_customers():
     else:
         rows = conn.execute(
             """
-            SELECT id, name, group_type
+            SELECT id, name, group_type, initial_debt
             FROM customers
             WHERE is_active = 1
             ORDER BY CASE group_type WHEN 'vjp' THEN 0 ELSE 1 END, name COLLATE NOCASE
@@ -260,11 +260,15 @@ def create_customer():
     data = request.get_json() or {}
     name = data.get("name", "").strip()
     group_type = "vjp" if data.get("group_type") == "vjp" else "regular"
+    try:
+        initial_debt = float(data.get("initial_debt") or 0)
+    except (TypeError, ValueError):
+        initial_debt = 0.0
     if not name:
         return jsonify({"success": False, "message": "Tên khách là bắt buộc."}), 400
     conn = get_db_conn()
     try:
-        cursor = conn.execute("INSERT INTO customers (name, group_type, is_active) VALUES (?, ?, 1)", (name, group_type))
+        cursor = conn.execute("INSERT INTO customers (name, group_type, initial_debt, is_active) VALUES (?, ?, ?, 1)", (name, group_type, initial_debt))
         conn.commit()
     except libsql.IntegrityError:
         conn.close()
@@ -295,11 +299,15 @@ def update_customer(customer_id):
     name = data.get("name", "").strip()
     group_type = "vjp" if data.get("group_type") == "vjp" else "regular"
     is_active = 1 if data.get("is_active", True) else 0
+    try:
+        initial_debt = float(data.get("initial_debt") or 0)
+    except (TypeError, ValueError):
+        initial_debt = 0.0
     if not name:
         conn.close()
         return jsonify({"success": False, "message": "Tên khách là bắt buộc."}), 400
     try:
-        conn.execute("UPDATE customers SET name = ?, group_type = ?, is_active = ? WHERE id = ?", (name, group_type, is_active, customer_id))
+        conn.execute("UPDATE customers SET name = ?, group_type = ?, initial_debt = ?, is_active = ? WHERE id = ?", (name, group_type, initial_debt, is_active, customer_id))
         conn.execute("UPDATE orders SET customer_name = ? WHERE customer_id = ?", (name, customer_id))
         conn.commit()
     except libsql.IntegrityError:
@@ -649,23 +657,39 @@ def get_order_matrix():
     orders = conn.execute(
         """
         SELECT o.id, o.customer_name, o.total_amount, o.paid_amount, date(o.created_at) AS order_date,
-               c.group_type
+               c.group_type, COALESCE(c.initial_debt, 0) AS initial_debt
         FROM orders o
         LEFT JOIN customers c ON c.id = o.customer_id
         ORDER BY order_date ASC, o.customer_name ASC, o.id ASC
         """
     ).fetchall()
+    
+    # Lấy toàn bộ khách hàng để đảm bảo những khách chưa gọi món ngày nào nhưng có nợ cũ vẫn xuất hiện trong ma trận
+    all_custs = conn.execute("SELECT name, group_type, initial_debt FROM customers WHERE is_active = 1").fetchall()
     conn.close()
+    
     dates = []
     customers = {}
+    
+    # Khởi tạo danh sách khách hàng có sẵn nợ cũ
+    for c in all_custs:
+        customers[c["name"]] = {
+            "customer_name": c["name"],
+            "group_type": c["group_type"],
+            "total_debt": float(c["initial_debt"] or 0),
+            "dates": {}
+        }
+        
     for order in orders:
         order_data = order_to_dict(order)
         order_date = order["order_date"]
         if order_date not in dates:
             dates.append(order_date)
+            
+        # Nếu chưa được khởi tạo từ danh sách khách (ví dụ khách đã bị ẩn nhưng có order cũ)
         customer = customers.setdefault(
             order["customer_name"],
-            {"customer_name": order["customer_name"], "group_type": order["group_type"] or "regular", "total_debt": 0, "dates": {}},
+            {"customer_name": order["customer_name"], "group_type": order["group_type"] or "regular", "total_debt": float(order["initial_debt"] or 0), "dates": {}}
         )
         customer["total_debt"] += order_data["remaining_amount"]
         cell = customer["dates"].setdefault(order_date, {"total_amount": 0, "paid_amount": 0, "remaining_amount": 0, "order_ids": []})
@@ -681,20 +705,30 @@ def get_public_debt():
     conn = get_db_conn()
     orders = conn.execute(
         """
-        SELECT o.id, o.customer_name, o.total_amount, o.paid_amount, c.group_type
+        SELECT o.id, o.customer_name, o.total_amount, o.paid_amount, c.group_type, COALESCE(c.initial_debt, 0) as initial_debt
         FROM orders o
         LEFT JOIN customers c ON c.id = o.customer_id
         ORDER BY o.customer_name ASC
         """
     ).fetchall()
+    
+    # Lấy toàn bộ khách hàng để nếu có khách chỉ có nợ cũ (chưa đặt món) vẫn hiện trong danh sách thanh toán
+    all_custs = conn.execute("SELECT name, group_type, initial_debt FROM customers WHERE is_active = 1").fetchall()
     conn.close()
     
     customers = {}
+    for c in all_custs:
+        customers[c["name"]] = {
+            "customer_name": c["name"],
+            "group_type": c["group_type"],
+            "total_debt": float(c["initial_debt"] or 0)
+        }
+        
     for order in orders:
         order_data = order_to_dict(order)
         customer = customers.setdefault(
             order["customer_name"],
-            {"customer_name": order["customer_name"], "group_type": order["group_type"] or "regular", "total_debt": 0}
+            {"customer_name": order["customer_name"], "group_type": order["group_type"] or "regular", "total_debt": float(order["initial_debt"] or 0)}
         )
         customer["total_debt"] += order_data["remaining_amount"]
         
@@ -720,8 +754,14 @@ def get_dashboard_stats():
         FROM orders
         """
     ).fetchone()
+    
+    # Lấy tổng nợ cũ từ bảng khách hàng
+    initial_debt_row = conn.execute("SELECT COALESCE(SUM(initial_debt), 0) AS total_initial_debt FROM customers WHERE is_active = 1").fetchone()
     conn.close()
-    return jsonify(dict(row))
+    
+    stats = dict(row)
+    stats["outstanding_debt"] += float(initial_debt_row["total_initial_debt"] or 0)
+    return jsonify(stats)
 
 
 @app.route("/api/customer-orders/<int:order_id>", methods=["PUT"])

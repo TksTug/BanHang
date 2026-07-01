@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const customerName = document.getElementById('customer-name');
     const customerGroup = document.getElementById('customer-group');
     const customerActive = document.getElementById('customer-active');
+    const customerInitialDebt = document.getElementById('customer-initial-debt');
     const resetCustomerForm = document.getElementById('reset-customer-form');
     const customerAdminList = document.getElementById('customer-admin-list');
 
@@ -101,11 +102,14 @@ document.addEventListener('DOMContentLoaded', () => {
             <article class="customer-admin-item ${customer.group_type === 'vjp' ? 'vjp' : ''} ${customer.is_active ? '' : 'inactive'}">
                 <div>
                     <strong>${customer.name}</strong>
-                    <span>${customer.group_type === 'vjp' ? 'Khách VJP' : ''}${customer.is_active ? '' : ' - Đã ẩn'}</span>
+                    <span>
+                        ${customer.group_type === 'vjp' ? 'Khách VJP' : 'Khách thường'}${customer.is_active ? '' : ' - Đã ẩn'}
+                        ${customer.initial_debt > 0 ? `<br><small class="text-danger">Nợ cũ tồn: ${formatCurrency(customer.initial_debt)}</small>` : ''}
+                    </span>
                 </div>
                 <div class="product-actions">
                     <button class="btn btn-secondary edit-customer-btn" type="button"
-                        data-id="${customer.id}" data-name="${customer.name}" data-group="${customer.group_type}" data-active="${customer.is_active ? '1' : '0'}">Sửa</button>
+                        data-id="${customer.id}" data-name="${customer.name}" data-group="${customer.group_type}" data-active="${customer.is_active ? '1' : '0'}" data-initial-debt="${customer.initial_debt}">Sửa</button>
                     <button class="btn ${customer.is_active ? 'btn-danger' : 'btn-confirm'} toggle-customer-btn" type="button" data-id="${customer.id}" data-active="${customer.is_active ? '1' : '0'}">
                         ${customer.is_active ? 'Ẩn' : 'Bật'}
                     </button>
@@ -127,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
         customerId.value = '';
         customerActive.checked = true;
         customerGroup.value = 'regular';
+        customerInitialDebt.value = 0;
     };
 
     const saveCustomer = async (event) => {
@@ -139,6 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 name: customerName.value.trim(),
                 group_type: customerGroup.value,
                 is_active: customerActive.checked,
+                initial_debt: parseFloat(customerInitialDebt.value) || 0,
             }),
         });
         const result = await response.json();
@@ -446,6 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
             customerName.value = editBtn.dataset.name;
             customerGroup.value = editBtn.dataset.group;
             customerActive.checked = editBtn.dataset.active === '1';
+            customerInitialDebt.value = editBtn.dataset.initialDebt || 0;
         }
         if (toggleBtn) {
             const isActive = toggleBtn.dataset.active === '1';

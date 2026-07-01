@@ -271,6 +271,7 @@ def toggle_customer_active(customer_id):
 @app.route("/api/customers/<int:customer_id>", methods=["PUT"])
 @api_admin_required
 def update_customer(customer_id):
+    conn = get_db_conn()
     data = request.get_json() or {}
     name = data.get("name", "").strip()
     group_type = "vjp" if data.get("group_type") == "vjp" else "regular"

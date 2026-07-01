@@ -17,9 +17,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const customerName = document.getElementById('customer-name');
     const customerGroup = document.getElementById('customer-group');
     const customerActive = document.getElementById('customer-active');
-    const customerInitialDebt = document.getElementById('customer-initial-debt');
     const resetCustomerForm = document.getElementById('reset-customer-form');
     const customerAdminList = document.getElementById('customer-admin-list');
+
+    // Khai báo quản lý nợ cũ
+    const debtForm = document.getElementById('debt-form');
+    const debtCustomerId = document.getElementById('debt-customer-id');
+    const debtAmount = document.getElementById('debt-amount');
+    const resetDebtFormBtn = document.getElementById('reset-debt-form');
+    const initialDebtsList = document.getElementById('initial-debts-list');
 
     const productForm = document.getElementById('product-form');
     const productId = document.getElementById('product-id');
@@ -94,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const response = await fetch('/api/customers');
         allCustomers = await response.json();
         renderCustomers();
+        renderInitialDebts();
         renderCustomerOptions();
     };
 
@@ -119,6 +126,33 @@ document.addEventListener('DOMContentLoaded', () => {
         `).join('');
     };
 
+    // Hàm render bảng nợ cũ riêng biệt
+    const renderInitialDebts = () => {
+        // Cập nhật thẻ Select trong form nợ cũ
+        const activeCusts = allCustomers.filter(c => c.is_active);
+        const currentSelectedId = debtCustomerId.value;
+        debtCustomerId.innerHTML = '<option value="">Chọn khách hàng...</option>' + activeCusts.map(c => `
+            <option value="${c.id}">${c.name}</option>
+        `).join('');
+        if (currentSelectedId) debtCustomerId.value = currentSelectedId;
+
+        // Render danh sách nợ cũ
+        initialDebtsList.innerHTML = allCustomers.map((customer) => {
+            const debtVal = parseFloat(customer.initial_debt) || 0;
+            return `
+                <tr>
+                    <td><strong>${customer.name}</strong></td>
+                    <td>${customer.group_type === 'vjp' ? '★ Khách VJP' : 'Khách thường'}</td>
+                    <td class="text-danger" style="font-weight: 700;">${formatCurrency(debtVal)}</td>
+                    <td>
+                        <button class="btn btn-secondary edit-debt-btn" type="button" 
+                                data-id="${customer.id}" data-amount="${debtVal}">Sửa nợ</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    };
+
     const renderCustomerOptions = () => {
         const activeCustomers = allCustomers.filter((customer) => customer.is_active);
         editOrderCustomer.innerHTML = activeCustomers.map((customer) => `
@@ -131,7 +165,6 @@ document.addEventListener('DOMContentLoaded', () => {
         customerId.value = '';
         customerActive.checked = true;
         customerGroup.value = 'regular';
-        customerInitialDebt.value = 0;
     };
 
     const saveCustomer = async (event) => {
@@ -144,7 +177,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 name: customerName.value.trim(),
                 group_type: customerGroup.value,
                 is_active: customerActive.checked,
-                initial_debt: parseFloat(customerInitialDebt.value) || 0,
             }),
         });
         const result = await response.json();
@@ -452,7 +484,6 @@ document.addEventListener('DOMContentLoaded', () => {
             customerName.value = editBtn.dataset.name;
             customerGroup.value = editBtn.dataset.group;
             customerActive.checked = editBtn.dataset.active === '1';
-            customerInitialDebt.value = editBtn.dataset.initialDebt || 0;
         }
         if (toggleBtn) {
             const isActive = toggleBtn.dataset.active === '1';
@@ -520,6 +551,54 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
             if (!result.success) alert(result.message || 'Không thể xóa đơn.');
             await refreshOrders();
+        }
+    });
+
+    // Các sự kiện cho form Quản lý Nợ cũ riêng biệt
+    const resetDebtForm = () => {
+        debtForm.reset();
+        debtCustomerId.disabled = false;
+        debtForm.querySelector('button[type="submit"]').textContent = 'Lưu số nợ';
+    };
+
+    resetDebtFormBtn.addEventListener('click', resetDebtForm);
+
+    debtForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const cId = debtCustomerId.value;
+        const amount = parseFloat(debtAmount.value) || 0;
+        const customer = allCustomers.find(c => String(c.id) === String(cId));
+        if (!customer) return;
+
+        // Gọi API cập nhật khách hàng nhưng chỉ truyền initial_debt (hoặc cả name & group_type của họ)
+        const response = await fetch(`/api/customers/${cId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: customer.name,
+                group_type: customer.group_type,
+                is_active: customer.is_active,
+                initial_debt: amount
+            })
+        });
+        const result = await response.json();
+        if (!result.success) {
+            alert(result.message || 'Không thể cập nhật nợ cũ.');
+            return;
+        }
+        resetDebtForm();
+        await loadCustomers();
+        await refreshOrders();
+    });
+
+    initialDebtsList.addEventListener('click', (event) => {
+        const editDebtBtn = event.target.closest('.edit-debt-btn');
+        if (editDebtBtn) {
+            debtCustomerId.value = editDebtBtn.dataset.id;
+            debtCustomerId.disabled = true; // Không cho đổi khách khi đang sửa
+            debtAmount.value = editDebtBtn.dataset.amount;
+            debtForm.querySelector('button[type="submit"]').textContent = 'Cập nhật nợ';
+            debtAmount.focus();
         }
     });
 

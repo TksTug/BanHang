@@ -51,7 +51,6 @@
                     <option value="regular">Khách thường</option>
                     <option value="vjp">Khách VJP</option>
                 </select>
-                <input type="number" id="customer-initial-debt" placeholder="Nợ cũ tồn đọng (đ)" min="0" step="1000" value="0">
                 <label class="check-row small-check">
                     <input type="checkbox" id="customer-active" checked>
                     <span>Đang dùng</span>
@@ -60,6 +59,38 @@
                 <button id="reset-customer-form" type="button" class="btn btn-secondary">Mới</button>
             </form>
             <div id="customer-admin-list" class="customer-admin-list"></div>
+        </section>
+
+        <!-- Phần quản lý Nợ cũ tồn đọng riêng biệt -->
+        <section class="panel">
+            <div class="section-heading">
+                <h2>Quản lý Nợ cũ tồn đọng</h2>
+                <p class="muted" style="margin: 0; font-size: 0.9rem;">(Tiền nợ tích lũy trước khi hệ thống web đi vào hoạt động)</p>
+            </div>
+            <form id="debt-form" class="compact-form">
+                <select id="debt-customer-id" required>
+                    <option value="">Chọn khách hàng...</option>
+                </select>
+                <input type="number" id="debt-amount" placeholder="Nhập số tiền nợ cũ tồn đọng (đ)" min="0" step="1000" required style="flex: 1.5;">
+                <button type="submit" class="btn btn-confirm">Lưu số nợ</button>
+                <button id="reset-debt-form" type="button" class="btn btn-secondary">Đặt lại</button>
+            </form>
+            
+            <div class="table-container" style="margin-top: 15px;">
+                <table class="matrix-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Khách hàng</th>
+                            <th>Phân nhóm</th>
+                            <th>Nợ tồn cũ</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="initial-debts-list">
+                        <tr><td colspan="4" class="text-center muted">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </section>
 
         <section class="panel">

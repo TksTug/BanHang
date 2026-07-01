@@ -160,11 +160,17 @@
                     const isPaid = item.total_debt <= 0;
                     const valStyle = isPaid ? 'color: var(--green-color); font-weight: 700;' : 'color: var(--red-color);';
                     const displayVal = isPaid ? 'Đã trả đủ (0đ)' : formatCurrency(item.total_debt);
+                    const datesHtml = (!isPaid && item.unpaid_dates && item.unpaid_dates.length) 
+                        ? `<div class="debt-dates" style="font-size: 0.8rem; color: #a18a5e; margin-top: 4px;">Ngày nợ chưa trả: ${item.unpaid_dates.join(', ')}</div>`
+                        : '';
                     return `
                         <div class="debt-item ${item.group_type === 'vjp' ? 'vjp' : ''}">
                             <div class="debt-name">
-                                ${item.group_type === 'vjp' ? '★ ' : ''}${item.customer_name}
-                                ${item.group_type === 'vjp' ? '<span class="vjp-badge">Khách VJP</span>' : ''}
+                                <div>
+                                    ${item.group_type === 'vjp' ? '★ ' : ''}${item.customer_name}
+                                    ${item.group_type === 'vjp' ? '<span class="vjp-badge">Khách VJP</span>' : ''}
+                                </div>
+                                ${datesHtml}
                             </div>
                             <div class="debt-val" style="${valStyle}">${displayVal}</div>
                         </div>

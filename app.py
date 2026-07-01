@@ -705,10 +705,10 @@ def get_public_debt():
     conn = get_db_conn()
     orders = conn.execute(
         """
-        SELECT o.id, o.customer_name, o.total_amount, o.paid_amount, c.group_type, COALESCE(c.initial_debt, 0) as initial_debt
+        SELECT o.id, o.customer_name, o.total_amount, o.paid_amount, o.created_at, c.group_type, COALESCE(c.initial_debt, 0) as initial_debt
         FROM orders o
         LEFT JOIN customers c ON c.id = o.customer_id
-        ORDER BY o.customer_name ASC
+        ORDER BY o.customer_name ASC, o.created_at ASC
         """
     ).fetchall()
     
@@ -718,19 +718,42 @@ def get_public_debt():
     
     customers = {}
     for c in all_custs:
+        initial_debt = float(c["initial_debt"] or 0)
         customers[c["name"]] = {
             "customer_name": c["name"],
             "group_type": c["group_type"],
-            "total_debt": float(c["initial_debt"] or 0)
+            "total_debt": initial_debt,
+            "unpaid_dates": ["Nợ cũ tồn đọng"] if initial_debt > 0 else []
         }
         
     for order in orders:
         order_data = order_to_dict(order)
+        remaining = order_data["remaining_amount"]
+        customer_name = order["customer_name"]
+        
+        # Nếu chưa được khởi tạo từ danh sách khách
         customer = customers.setdefault(
-            order["customer_name"],
-            {"customer_name": order["customer_name"], "group_type": order["group_type"] or "regular", "total_debt": float(order["initial_debt"] or 0)}
+            customer_name,
+            {
+                "customer_name": customer_name,
+                "group_type": order["group_type"] or "regular",
+                "total_debt": float(order["initial_debt"] or 0),
+                "unpaid_dates": ["Nợ cũ tồn đọng"] if float(order["initial_debt"] or 0) > 0 else []
+            }
         )
-        customer["total_debt"] += order_data["remaining_amount"]
+        
+        customer["total_debt"] += remaining
+        if remaining > 0:
+            # Lấy phần ngày YYYY-MM-DD
+            order_date_str = order["created_at"][:10]
+            # Format ngày sang DD/MM/YYYY cho thân thiện
+            try:
+                parts = order_date_str.split('-')
+                friendly_date = f"{parts[2]}/{parts[1]}/{parts[0]}"
+            except Exception:
+                friendly_date = order_date_str
+            if friendly_date not in customer["unpaid_dates"]:
+                customer["unpaid_dates"].append(friendly_date)
         
     debt_list = list(customers.values())
     # Sắp xếp VJP lên đầu, sau đó đến người còn nợ nhiều, người hết nợ (0đ) xếp cuối cùng

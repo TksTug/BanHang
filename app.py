@@ -3,11 +3,20 @@ from functools import wraps
 from pathlib import Path
 from uuid import uuid4
 import sqlite3
+import os
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.utils import secure_filename
 
+import cloudinary
+import cloudinary.uploader
+
 from database import DB_FILE, init_db
+
+# Cấu hình Cloudinary bằng CLOUDINARY_URL biến môi trường
+cloudinary.config(
+    cloudinary_url=os.environ.get("CLOUDINARY_URL", "cloudinary://719463999946452:bZM6xZm4RihiSeoOlxgvCfH21HE@xhbcify4")
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "static" / "uploads"
@@ -60,11 +69,16 @@ def save_uploaded_image(file_storage):
         return None
     if not allowed_file(file_storage.filename):
         raise ValueError("Chỉ hỗ trợ ảnh png, jpg, jpeg, gif hoặc webp.")
-    original_name = secure_filename(file_storage.filename)
-    extension = original_name.rsplit(".", 1)[1].lower()
-    filename = f"{uuid4().hex}.{extension}"
-    file_storage.save(UPLOAD_DIR / filename)
-    return url_for("static", filename=f"uploads/{filename}")
+    
+    # Upload thẳng lên Cloudinary
+    try:
+        upload_result = cloudinary.uploader.upload(
+            file_storage,
+            folder="anh_dong_quan"
+        )
+        return upload_result.get("secure_url")
+    except Exception as e:
+        raise ValueError(f"Không thể upload ảnh lên Cloudinary: {str(e)}")
 
 
 def order_status(order):

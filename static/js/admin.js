@@ -278,14 +278,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             const noteText = order.note ? order.note.trim() : '';
-            if (noteText || hasExtraItems) {
-                const itemsListStr = currentOrderItems.join(', ');
-                let detailStr = `- ${order.customer_name}: ${itemsListStr}`;
-                if (noteText) {
-                    detailStr += ` (Ghi chú: ${noteText})`;
-                }
-                customerNotes.push(detailStr);
+            const itemsListStr = currentOrderItems.join(', ');
+            let detailStr = `- ${order.customer_name}: ${itemsListStr}`;
+            if (noteText) {
+                detailStr += ` (Ghi chú: ${noteText})`;
             }
+            customerNotes.push(detailStr);
         });
 
         const selectedDateStr = orderDateFilter.value ? formatDate(orderDateFilter.value) : "Tất cả các ngày";
@@ -308,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
         text += `Tổng số đơn đặt: ${orders.length} đơn hàng\n`;
         
         if (customerNotes.length > 0) {
-            text += `\n📝 GHI CHÚ CỦA KHÁCH HÀNG:\n`;
+            text += `\n👤 CHI TIẾT NGƯỜI NHẬN (Phục vụ phát cơm):\n`;
             text += customerNotes.join('\n') + `\n`;
         }
 

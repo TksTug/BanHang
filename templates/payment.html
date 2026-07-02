@@ -169,9 +169,12 @@
                     Đơn của bạn đã được ghi nhận. Quét mã MoMo/VietQR bên cạnh và chuyển khoản thanh toán nhé!
                 </p>
                 
-                <!-- Khu vực hiển thị Ảnh vui nhộn -->
+                <!-- Khu vực hiển thị Video vui nhộn -->
                 <div style="margin: 5px 0; border-radius: var(--border-radius); overflow: hidden; border: 1.5px solid var(--border-color); background: #fafafa; display: flex; align-items: center; justify-content: center; min-height: 200px;">
-                    <img src="/static/uploads/payment_fun.jpg" alt="Thanh toán nhé bạn ơi!" style="width: 100%; max-height: 260px; object-fit: contain;">
+                    <video id="success-video" autoplay loop muted playsinline style="width: 100%; max-height: 260px; object-fit: contain;">
+                        <source src="/static/uploads/payment_fun.mp4" type="video/mp4">
+                        Trình duyệt của bạn không hỗ trợ phát video.
+                    </video>
                 </div>
                 
                 <button id="close-success-modal-btn" class="btn btn-primary btn-block" type="button" style="margin-top: 5px; font-size: 1.05rem; min-height: 48px; background: var(--green-color); border-color: var(--green-color);">
@@ -247,9 +250,17 @@
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('order_success') === '1') {
                 const modal = document.getElementById('payment-success-modal');
+                const videoEl = document.getElementById('success-video');
+                
                 modal.classList.remove('hidden');
+                if (videoEl) {
+                    videoEl.play().catch(e => console.log("Lỗi tự động phát video: ", e));
+                }
                 
                 document.getElementById('close-success-modal-btn').addEventListener('click', () => {
+                    if (videoEl) {
+                        videoEl.pause();
+                    }
                     modal.classList.add('hidden');
                     // Xóa query params trên URL để khi reload không bị hiện lại popup
                     window.history.replaceState({}, document.title, window.location.pathname);

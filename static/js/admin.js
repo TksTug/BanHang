@@ -329,6 +329,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const exportOrdersBtn = document.getElementById('export-orders-btn');
+    if (exportOrdersBtn) {
+        exportOrdersBtn.addEventListener('click', () => {
+            const dateVal = orderDateFilter.value || '';
+            const statusVal = orderStatusFilter.value || '';
+            const searchVal = orderSearch.value.trim();
+            
+            const queryParams = new URLSearchParams();
+            if (dateVal) queryParams.append('date', dateVal);
+            if (statusVal) queryParams.append('status', statusVal);
+            if (searchVal) queryParams.append('search', searchVal);
+            
+            window.location.href = `/api/orders/export?${queryParams.toString()}`;
+        });
+    }
+
     const renderOrders = () => {
         const orders = filteredOrders();
         updateDailySummary(orders);

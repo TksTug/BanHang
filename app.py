@@ -3,8 +3,10 @@ from functools import wraps
 from pathlib import Path
 from uuid import uuid4
 import os
+import csv
+import io
 
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for, send_file
 from werkzeug.utils import secure_filename
 
 import cloudinary
@@ -634,6 +636,107 @@ def get_all_orders():
     cursor.close()
     conn.close()
     return jsonify(result)
+
+
+@app.route("/api/orders/export", methods=["GET"])
+@api_admin_required
+def export_orders():
+    date_filter = request.args.get("date")
+    status_filter = request.args.get("status")
+    search_filter = request.args.get("search", "").strip().lower()
+    
+    conn = get_db_conn()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    
+    query = """
+        SELECT o.*, c.group_type FROM orders o
+        LEFT JOIN customers c ON c.id = o.customer_id
+    """
+    params = []
+    where_clauses = []
+    
+    if date_filter:
+        where_clauses.append("DATE(o.created_at) = %s")
+        params.append(date_filter)
+        
+    if where_clauses:
+        query += " WHERE " + " AND ".join(where_clauses)
+        
+    query += " ORDER BY o.created_at DESC"
+    
+    cursor.execute(query, tuple(params))
+    orders = cursor.fetchall()
+    order_list = build_order_list(conn, orders)
+    cursor.close()
+    conn.close()
+    
+    filtered_list = []
+    for o in order_list:
+        if status_filter and o["status"] != status_filter:
+            continue
+            
+        if search_filter:
+            item_text = " ".join([item["product_name"] for item in o.get("items", [])]).lower()
+            note_text = (o.get("note") or "").lower()
+            cust_name = o["customer_name"].lower()
+            if search_filter not in cust_name and search_filter not in item_text and search_filter not in note_text:
+                continue
+                
+        filtered_list.append(o)
+        
+    output = io.BytesIO()
+    output.write(b'\xef\xbb\xbf') # UTF-8 BOM
+    
+    wrapper = io.TextIOWrapper(output, encoding='utf-8', line_buffering=True)
+    writer = csv.writer(wrapper)
+    
+    writer.writerow([
+        "ID Đơn hàng", "Thời gian đặt", "Khách hàng", "Nhóm khách",
+        "Chi tiết món ăn", "Tổng số phần", "Tổng tiền đơn (VND)",
+        "Đã trả (VND)", "Còn nợ (VND)", "Hình thức thanh toán", "Trạng thái", "Ghi chú"
+    ])
+    
+    for o in filtered_list:
+        items_str = ", ".join([f"{item['product_name']} x{item['quantity']}" for item in o.get("items", [])])
+        total_qty = sum([int(item['quantity']) for item in o.get("items", [])])
+        
+        # Format created_at sang định dạng dẽ nhìn hơn cho Excel
+        # created_at dạng: '2026-07-02T14:38:00'
+        dt_str = o["created_at"]
+        try:
+            dt = datetime.fromisoformat(dt_str)
+            dt_str = dt.strftime("%d/%m/%Y %H:%M")
+        except Exception:
+            pass
+            
+        status_vi = "Đã thanh toán" if o["status"] == "paid" else "Đã trả một phần" if o["status"] == "partial" else "Chưa thanh toán"
+        group_vi = "Khách VJP" if o["group_type"] == "vjp" else "Khách thường"
+        
+        writer.writerow([
+            o["id"],
+            dt_str,
+            o["customer_name"],
+            group_vi,
+            items_str,
+            total_qty,
+            o["total_amount"],
+            o["paid_amount"],
+            o["remaining_amount"],
+            o["payment_method"],
+            status_vi,
+            o["note"]
+        ])
+        
+    wrapper.detach()
+    output.seek(0)
+    
+    filename_date = date_filter if date_filter else "tat_ca"
+    return send_file(
+        output,
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name=f"danh_sach_don_hang_{filename_date}.csv"
+    )
 
 
 @app.route("/api/orders/<int:order_id>", methods=["PUT", "DELETE"])

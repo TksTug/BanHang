@@ -30,7 +30,7 @@ body {
 }
 
 .container {
-    max-width: 1200px;
+    max-width: 1280px;
     margin: 0 auto;
     padding: 24px;
 }
@@ -108,8 +108,8 @@ body {
 
 .page-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
-    gap: 28px;
+    grid-template-columns: minmax(0, 1fr) 300px; /* Thu gọn cột phải lại */
+    gap: 20px; /* Thu nhỏ khoảng cách giữa 2 cột cho khít lại */
     align-items: start;
 }
 
@@ -132,8 +132,8 @@ body {
 
 .product-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); /* Cho phép hiển thị 3 món trên 1 hàng ở máy tính */
+    gap: 20px;
 }
 
 .product-card,

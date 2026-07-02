@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let editingOrderId = null;
     let lastOrderId = null;
     let allProducts = [];
+    let isNewOrder = false;
 
     const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
     const formatDate = (value) => value ? new Intl.DateTimeFormat('vi-VN').format(new Date(value.replace(' ', 'T'))) : '';
@@ -166,21 +167,50 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCart();
     };
 
-    const addExtraToCart = (productId, productName, price) => {
-        const extraId = `extra-${productId}-${price}`;
-        const existingItem = cart.find((item) => item.id === extraId);
-        if (existingItem) {
-            existingItem.quantity += 1;
+    const addExtraToCart = async (productId, productName, price) => {
+        if (isNewOrder) {
+            const extraId = `extra-${productId}-${price}`;
+            const existingItem = cart.find((item) => item.id === extraId);
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                cart.push({
+                    id: extraId,
+                    productId: parseInt(productId),
+                    name: `${productName} (thêm)`,
+                    price: price,
+                    quantity: 1
+                });
+            }
+            updateCart();
         } else {
-            cart.push({
-                id: extraId,
-                productId: parseInt(productId),
-                name: `${productName} (thêm)`,
-                price: price,
-                quantity: 1
-            });
+            if (!lastOrderId) { alert('Không tìm thấy đơn hàng cần thêm.'); return; }
+            try {
+                const response = await fetch(`/api/orders/${lastOrderId}/extra`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ product_name: productName, price }),
+                });
+                const result = await response.json();
+                if (!result.success) {
+                    alert(result.message || 'Không thể thêm đồ ăn.');
+                } else {
+                    await loadCustomerSummary();
+                }
+            } catch (error) {
+                console.error('Lỗi khi thêm đồ ăn:', error);
+                alert('Lỗi kết nối máy chủ.');
+            }
         }
-        updateCart();
+    };
+
+    const openExtraFoodPanel = (orderId) => {
+        lastOrderId = orderId;
+        isNewOrder = false;
+        const cartExtraPanel = document.getElementById('cart-extra-panel');
+        if (cartExtraPanel) {
+            cartExtraPanel.style.right = '0';
+        }
     };
 
     const removeFromCart = (id) => {
@@ -391,6 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (openCartExtraBtn && cartExtraPanel) {
         openCartExtraBtn.addEventListener('click', () => {
+            isNewOrder = true; // Đây là đơn hàng mới đang soạn
             cartExtraPanel.style.right = '0';
         });
     }
@@ -467,7 +498,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     customerSummary.addEventListener('click', (event) => {
         const editBtn = event.target.closest('.edit-my-order-btn');
-        if (editBtn) openEditOrderModal(editBtn.dataset.id);
+        if (editBtn) {
+            openEditOrderModal(editBtn.dataset.id);
+            return;
+        }
+        
+        const extraBtn = event.target.closest('.add-extra-food-btn');
+        if (extraBtn) {
+            openExtraFoodPanel(extraBtn.dataset.id);
+            return;
+        }
     });
 
     Promise.all([loadDayStatus(), loadCustomers(), loadProducts()]);

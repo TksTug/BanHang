@@ -26,14 +26,9 @@
     <main class="container page-grid">
         <section>
             <div class="section-heading">
-                <h2>🍲 Món chính hôm nay</h2>
+                <h2>Món đang bán</h2>
             </div>
-            <div id="product-grid" class="product-grid" style="margin-bottom: 35px;"></div>
-
-            <div class="section-heading">
-                <h2>🍜 Đồ ăn thêm (Đồng giá 30.000đ)</h2>
-            </div>
-            <div id="extra-product-grid" class="product-grid"></div>
+            <div id="product-grid" class="product-grid"></div>
         </section>
 
         <aside class="order-lookup">
@@ -59,6 +54,14 @@
         <div id="cart-items" class="cart-items">
             <p class="cart-empty-msg">Giỏ hàng đang trống.</p>
         </div>
+        <!-- Phần chọn đồ ăn thêm nhanh trong giỏ hàng -->
+        <div class="cart-extra-section" style="padding: 14px; border-top: 1.5px dashed var(--border-color); background: #fafaf8;">
+            <h3 style="margin: 0 0 10px 0; font-size: 0.95rem; font-weight: 700; color: var(--text-color);">🍜 Thêm đồ ăn kèm (Đồng giá 30k)</h3>
+            <div id="cart-extra-food-list" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; scrollbar-width: thin;">
+                <!-- JS sẽ sinh các nút chọn món thêm cuộn ngang ở đây -->
+            </div>
+        </div>
+
         <div class="cart-footer">
             <div class="cart-total">
                 <strong>Tổng cộng:</strong>

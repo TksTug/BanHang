@@ -24,10 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const editOrderNoteInput = document.getElementById('edit-order-note-input');
     const editOrderProductList = document.getElementById('edit-order-product-list');
     const saveEditOrderBtn = document.getElementById('save-edit-order-btn');
-    const extraFoodPanel = document.getElementById('extra-food-panel');
-    const closeExtraPanel = document.getElementById('close-extra-panel');
-    const extraFoodList = document.getElementById('extra-food-list');
-
     let cart = [];
     let customers = [];
     let selectedCustomer = null;
@@ -35,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let editingOrderId = null;
     let lastOrderId = null;
     let allProducts = [];
-    let isNewOrder = false;
 
     const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
     const formatDate = (value) => value ? new Intl.DateTimeFormat('vi-VN').format(new Date(value.replace(' ', 'T'))) : '';
@@ -72,14 +67,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/products?public=1');
             const products = await response.json();
             allProducts = products;
+            
+            const extraProductGrid = document.getElementById('extra-product-grid');
             productGrid.innerHTML = '';
+            if (extraProductGrid) extraProductGrid.innerHTML = '';
+            
             if (!products.length) {
                 productGrid.innerHTML = '<p class="muted">Hôm nay chưa có món nào được mở bán.</p>';
                 return;
             }
 
+            let hasMainProducts = false;
+            let hasExtraProducts = false;
+
             products.forEach((product) => {
                 const soldOut = Boolean(product.is_sold_out);
+                // Các món đồng giá 30k khởi tạo từ daily_foods có mô tả đặc trưng
+                const isExtra = product.description && product.description.includes("Món đồng giá");
+                
                 const card = document.createElement('article');
                 card.className = `product-card ${soldOut ? 'sold-out' : ''}`;
                 card.innerHTML = `
@@ -94,8 +99,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         </button>
                     </div>
                 `;
-                productGrid.appendChild(card);
+                
+                if (isExtra && extraProductGrid) {
+                    extraProductGrid.appendChild(card);
+                    hasExtraProducts = true;
+                } else {
+                    productGrid.appendChild(card);
+                    hasMainProducts = true;
+                }
             });
+
+            if (!hasMainProducts) {
+                productGrid.innerHTML = '<p class="muted">Không có món chính nào hôm nay.</p>';
+            }
+            if (!hasExtraProducts && extraProductGrid) {
+                extraProductGrid.innerHTML = '<p class="muted">Không có món ăn thêm nào được bật bán hôm nay.</p>';
+            }
         } catch (error) {
             console.error('Lỗi khi tải món:', error);
             productGrid.innerHTML = '<p>Không thể tải danh sách món. Vui lòng thử lại sau.</p>';
@@ -235,44 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadCustomerSummary();
     };
 
-    const openExtraFoodPanel = (orderId) => {
-        lastOrderId = orderId;
-        isNewOrder = false; // Đánh dấu là thêm cho đơn cũ, không phải đơn mới đặt
-        renderExtraFoodList();
-        extraFoodPanel.classList.remove('hidden');
-        extraFoodPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    };
 
-    const renderExtraFoodList = () => {
-        extraFoodList.innerHTML = allProducts.map((product) => `
-            <div class="extra-food-item">
-                <strong>${product.name}</strong>
-                <div class="extra-price-buttons">
-                    <button class="btn btn-sm btn-quick-price" data-name="${product.name}" data-price="5000" type="button">5k</button>
-                    <button class="btn btn-sm btn-quick-price" data-name="${product.name}" data-price="10000" type="button">10k</button>
-                    <button class="btn btn-sm btn-quick-price" data-name="${product.name}" data-price="15000" type="button">15k</button>
-                    <button class="btn btn-sm btn-quick-price" data-name="${product.name}" data-price="20000" type="button">20k</button>
-                    <div class="custom-price-row">
-                        <input type="number" class="custom-price-input" data-name="${product.name}" min="0" step="1000" placeholder="Giá khác">
-                        <button class="btn btn-sm btn-confirm add-custom-extra" data-name="${product.name}" type="button">Thêm</button>
-                    </div>
-                </div>
-            </div>
-        `).join('');
-    };
-
-    const addExtraFood = async (productName, price) => {
-        if (!lastOrderId) { alert('Không tìm thấy đơn hàng.'); return; }
-        const response = await fetch(`/api/orders/${lastOrderId}/extra`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ product_name: productName, price }),
-        });
-        const result = await response.json();
-        if (!result.success) { alert(result.message || 'Không thể thêm đồ ăn.'); return; }
-        alert(`Đã thêm ${productName} (${formatCurrency(price)}) vào đơn!`);
-        await loadCustomerSummary();
-    };
 
     const handleOrderSubmit = async (event) => {
         event.preventDefault();
@@ -320,18 +302,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             lastOrderId = result.order_id;
-            isNewOrder = true; // Đánh dấu là đơn hàng mới đặt
-            showNotification();
-            await loadCustomerSummary();
             cart = [];
             updateCart();
             orderForm.reset();
             if (cartDrawer.classList.contains('open')) {
                 toggleCart();
             }
-            renderExtraFoodList();
-            extraFoodPanel.classList.remove('hidden');
-            setTimeout(() => extraFoodPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
+            window.location.href = `/payment?order_success=1&customer_id=${selectedCustomer.id}&order_id=${result.order_id}`;
         } catch (error) {
             console.error('Lỗi khi đặt hàng:', error);
             alert('Không thể kết nối máy chủ để đặt hàng.');
@@ -365,11 +342,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cartFab.addEventListener('click', toggleCart);
     closeCartBtn.addEventListener('click', toggleCart);
-    productGrid.addEventListener('click', (event) => {
-        if (!event.target.classList.contains('add-to-cart-btn') || event.target.disabled) return;
-        addToCart(event.target.dataset.id, event.target.dataset.name, parseFloat(event.target.dataset.price));
-        if (!cartDrawer.classList.contains('open')) toggleCart();
-    });
+    // Lắng nghe sự kiện thêm món của cả 2 Grid món ăn
+    const addProductGridListeners = (gridEl) => {
+        if (!gridEl) return;
+        gridEl.addEventListener('click', (event) => {
+            if (!event.target.classList.contains('add-to-cart-btn') || event.target.disabled) return;
+            addToCart(event.target.dataset.id, event.target.dataset.name, parseFloat(event.target.dataset.price));
+            if (!cartDrawer.classList.contains('open')) toggleCart();
+        });
+    };
+    addProductGridListeners(productGrid);
+    addProductGridListeners(document.getElementById('extra-product-grid'));
+
     cartItemsContainer.addEventListener('click', (event) => {
         if (event.target.classList.contains('remove-item-btn')) removeFromCart(event.target.dataset.id);
     });
@@ -378,40 +362,10 @@ document.addEventListener('DOMContentLoaded', () => {
     closeEditModal.addEventListener('click', () => { editModal.classList.add('hidden'); editingOrderId = null; });
     editModal.addEventListener('click', (e) => { if (e.target === editModal) { editModal.classList.add('hidden'); editingOrderId = null; } });
     saveEditOrderBtn.addEventListener('click', saveEditedCustomerOrder);
-    const handleGotoPayment = () => {
-        if (isNewOrder && selectedCustomer && lastOrderId) {
-            window.location.href = `/payment?order_success=1&customer_id=${selectedCustomer.id}&order_id=${lastOrderId}`;
-        } else {
-            extraFoodPanel.classList.add('hidden');
-        }
-    };
-
-    closeExtraPanel.addEventListener('click', handleGotoPayment);
-    
-    const gotoPaymentBtn = document.getElementById('goto-payment-btn');
-    if (gotoPaymentBtn) {
-        gotoPaymentBtn.addEventListener('click', handleGotoPayment);
-    }
 
     customerSummary.addEventListener('click', (event) => {
         const editBtn = event.target.closest('.edit-my-order-btn');
-        const extraBtn = event.target.closest('.add-extra-food-btn');
         if (editBtn) openEditOrderModal(editBtn.dataset.id);
-        if (extraBtn) openExtraFoodPanel(extraBtn.dataset.id);
-    });
-
-    extraFoodList.addEventListener('click', (event) => {
-        const quickBtn = event.target.closest('.btn-quick-price');
-        const customBtn = event.target.closest('.add-custom-extra');
-        if (quickBtn) {
-            addExtraFood(quickBtn.dataset.name, parseFloat(quickBtn.dataset.price));
-        }
-        if (customBtn) {
-            const input = customBtn.closest('.custom-price-row')?.querySelector('.custom-price-input');
-            const price = parseFloat(input?.value);
-            if (!price || price <= 0) { alert('Vui lòng nhập giá hợp lệ.'); return; }
-            addExtraFood(customBtn.dataset.name, price);
-        }
     });
 
     Promise.all([loadDayStatus(), loadCustomers(), loadProducts()]);

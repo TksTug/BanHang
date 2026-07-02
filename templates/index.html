@@ -26,9 +26,14 @@
     <main class="container page-grid">
         <section>
             <div class="section-heading">
-                <h2>Món đang bán</h2>
+                <h2>🍲 Món chính hôm nay</h2>
             </div>
-            <div id="product-grid" class="product-grid"></div>
+            <div id="product-grid" class="product-grid" style="margin-bottom: 35px;"></div>
+
+            <div class="section-heading">
+                <h2>🍜 Đồ ăn thêm (Đồng giá 30.000đ)</h2>
+            </div>
+            <div id="extra-product-grid" class="product-grid"></div>
         </section>
 
         <aside class="order-lookup">
@@ -105,19 +110,7 @@
         </div>
     </div>
 
-    <div id="extra-food-panel" class="extra-food-panel hidden">
-        <div class="extra-food-header">
-            <h2>🍜 Đồ ăn thêm</h2>
-            <button id="close-extra-panel" class="close-cart-btn" type="button">&times;</button>
-        </div>
-        <p class="extra-food-desc">Chọn món và giá để thêm vào đơn vừa đặt.</p>
-        <div id="extra-food-list" class="extra-food-list"></div>
-        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border-color);">
-            <button id="goto-payment-btn" class="btn btn-primary btn-block" type="button" style="background: var(--green-color); border-color: var(--green-color); width: 100%; font-size: 1.05rem; min-height: 48px;">
-                Xác nhận đơn & Sang thanh toán 💳
-            </button>
-        </div>
-    </div>
+
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

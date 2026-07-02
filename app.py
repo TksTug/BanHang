@@ -182,8 +182,12 @@ def calculate_items_total(conn, items, public_only=True):
             cursor.execute("SELECT id, name, price FROM products WHERE id = %s", (product_id,))
             product = cursor.fetchone()
         if product:
-            total_amount += float(product["price"]) * quantity
-            saved_items.append((product["id"], product["name"], float(product["price"]), quantity))
+            price_val = item.get("price")
+            product_price = float(price_val) if price_val is not None else float(product["price"])
+            product_name = item.get("name") or product["name"]
+            
+            total_amount += product_price * quantity
+            saved_items.append((product["id"], product_name, product_price, quantity))
     cursor.close()
     return total_amount, saved_items
 

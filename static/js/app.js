@@ -113,13 +113,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span style="font-size: 0.85rem; color: var(--muted-color);">(Gốc: ${formatCurrency(product.price)})</span>
                         </div>
                         <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
-                            <button class="btn btn-secondary quick-price-btn" data-name="${product.name}" data-price="5000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+5k</button>
-                            <button class="btn btn-secondary quick-price-btn" data-name="${product.name}" data-price="10000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+10k</button>
-                            <button class="btn btn-secondary quick-price-btn" data-name="${product.name}" data-price="15000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+15k</button>
-                            <button class="btn btn-secondary quick-price-btn" data-name="${product.name}" data-price="20000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+20k</button>
+                            <button class="btn btn-secondary quick-price-btn" data-product-id="${product.id}" data-name="${product.name}" data-price="5000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+5k</button>
+                            <button class="btn btn-secondary quick-price-btn" data-product-id="${product.id}" data-name="${product.name}" data-price="10000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+10k</button>
+                            <button class="btn btn-secondary quick-price-btn" data-product-id="${product.id}" data-name="${product.name}" data-price="15000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+15k</button>
+                            <button class="btn btn-secondary quick-price-btn" data-product-id="${product.id}" data-name="${product.name}" data-price="20000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+20k</button>
                             <div style="display: flex; gap: 4px; align-items: center; margin-left: auto;">
-                                <input type="number" class="custom-extra-price-input" data-name="${product.name}" placeholder="đ" min="1000" step="1000" style="width: 70px; padding: 4px 6px; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 4px; height: 28px;" ${soldOut ? 'disabled' : ''}>
-                                <button class="btn btn-confirm add-custom-extra-btn" data-name="${product.name}" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px; background: var(--green-color); color: white;" ${soldOut ? 'disabled' : ''}>Thêm</button>
+                                <input type="number" class="custom-extra-price-input" data-product-id="${product.id}" data-name="${product.name}" placeholder="đ" min="1000" step="1000" style="width: 70px; padding: 4px 6px; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 4px; height: 28px;" ${soldOut ? 'disabled' : ''}>
+                                <button class="btn btn-confirm add-custom-extra-btn" data-product-id="${product.id}" data-name="${product.name}" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px; background: var(--green-color); color: white;" ${soldOut ? 'disabled' : ''}>Thêm</button>
                             </div>
                         </div>
                     `;
@@ -163,6 +163,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const existingItem = cart.find((item) => item.id === id);
         if (existingItem) existingItem.quantity += 1;
         else cart.push({ id, name, price, quantity: 1 });
+        updateCart();
+    };
+
+    const addExtraToCart = (productId, productName, price) => {
+        const extraId = `extra-${productId}-${price}`;
+        const existingItem = cart.find((item) => item.id === extraId);
+        if (existingItem) {
+            existingItem.quantity += 1;
+        } else {
+            cart.push({
+                id: extraId,
+                productId: parseInt(productId),
+                name: `${productName} (thêm)`,
+                price: price,
+                quantity: 1
+            });
+        }
         updateCart();
     };
 
@@ -304,7 +321,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     customer_id: selectedCustomer.id,
                     payment_method: paymentMethod.value,
                     note: orderNote.value.trim(),
-                    items: cart.map((item) => ({ id: item.id, quantity: item.quantity })),
+                    items: cart.map((item) => ({
+                        id: item.productId || item.id,
+                        name: item.name,
+                        price: item.price,
+                        quantity: item.quantity
+                    })),
                 }),
             });
             const result = await response.json();
@@ -374,12 +396,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (closeCartExtraBtn && cartExtraPanel) {
         closeCartExtraBtn.addEventListener('click', () => {
-            cartExtraPanel.style.right = '-100%';
+            cartExtraPanel.style.right = '-340px';
         });
     }
     if (confirmCartExtraBtn && cartExtraPanel) {
         confirmCartExtraBtn.addEventListener('click', () => {
-            cartExtraPanel.style.right = '-100%';
+            cartExtraPanel.style.right = '-340px';
         });
     }
 
@@ -390,10 +412,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const customBtn = event.target.closest('.add-custom-extra-btn');
             
             if (quickBtn) {
+                const pId = quickBtn.dataset.productId;
                 const name = quickBtn.dataset.name;
                 const price = parseFloat(quickBtn.dataset.price);
-                const extraId = `extra-${name}-${price}`;
-                addToCart(extraId, `${name} (thêm)`, price);
+                addExtraToCart(pId, name, price);
                 
                 // Hiệu ứng nhấp nháy nút để báo hiệu đã thêm
                 const origText = quickBtn.textContent;
@@ -408,6 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             if (customBtn) {
+                const pId = customBtn.dataset.productId;
                 const name = customBtn.dataset.name;
                 const container = customBtn.closest('div');
                 const input = container ? container.querySelector('.custom-extra-price-input') : null;
@@ -419,8 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 
-                const extraId = `extra-${name}-${price}`;
-                addToCart(extraId, `${name} (thêm)`, price);
+                addExtraToCart(pId, name, price);
                 if (input) input.value = ''; // Reset input
                 
                 const origText = customBtn.textContent;

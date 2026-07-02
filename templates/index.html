@@ -7,18 +7,19 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
 </head>
 <body>
     <header class="main-header">
         <div class="container header-content">
             <div>
-                <h1>Anh Đông quán</h1>
+                <h1><i class="fa-solid fa-bowl-food"></i> Anh Đông quán</h1>
                 <p id="day-status-text">Hôm nay cố gắng rồi, ăn gì ngon nha! .</p>
             </div>
-            <div class="header-actions" style="display:flex; gap:10px; align-items:center;">
-                <a href="/payment" class="admin-link">Trang thanh toán</a>
-                <a href="/admin/login" class="admin-link">Đăng nhập admin</a>
+            <div class="header-actions">
+                <a href="/payment" class="admin-link"><i class="fa-solid fa-credit-card"></i> Thanh toán</a>
+                <a href="/admin/login" class="admin-link"><i class="fa-solid fa-user-gear"></i> Admin</a>
             </div>
         </div>
     </header>
@@ -26,20 +27,20 @@
     <main class="container page-grid">
         <section>
             <div class="section-heading">
-                <h2>Món đang bán</h2>
+                <h2><i class="fa-solid fa-utensils"></i> Món ăn đang bán</h2>
             </div>
             <div id="product-grid" class="product-grid"></div>
         </section>
 
         <aside class="order-lookup">
-            <h2>Tên người đặt</h2>
+            <h2><i class="fa-solid fa-user-tag"></i> Tên người đặt</h2>
             <div class="customer-picker">
                 <input type="search" id="customer-search" placeholder="Tìm tên của bạn">
                 <div id="customer-list" class="customer-list"></div>
                 <p id="selected-customer-text" class="muted">Chưa chọn tên.</p>
             </div>
 
-            <h2>Tổng kết cá nhân</h2>
+            <h2><i class="fa-solid fa-receipt"></i> Lịch sử cá nhân</h2>
             <div id="customer-summary" class="customer-orders">
                 <p class="muted">Chọn tên để xem tổng nợ, đơn đã đặt và lịch sử trả tiền.</p>
             </div>
@@ -48,7 +49,7 @@
 
     <div id="cart-drawer" class="cart-drawer">
         <div class="cart-header">
-            <h2>Giỏ hàng</h2>
+            <h2><i class="fa-solid fa-basket-shopping"></i> Giỏ hàng</h2>
             <button id="close-cart-btn" class="close-cart-btn" type="button">&times;</button>
         </div>
         <div id="cart-items" class="cart-items">
@@ -56,8 +57,8 @@
         </div>
         <!-- Nút gọi thêm đồ ăn kèm nhanh -->
         <div style="padding: 10px 14px; border-top: 1.5px dashed var(--border-color); background: #fafaf8;">
-            <button id="open-cart-extra-btn" class="btn btn-secondary btn-block" type="button" style="background: #fff8eb; color: var(--primary-dark); border: 1.5px solid var(--primary-color); width: 100%; font-size: 0.95rem; font-weight: 700;">
-                🍜 Gọi thêm đồ ăn kèm (5k, 10k, 20k...)
+            <button id="open-cart-extra-btn" class="btn btn-secondary btn-block" type="button" style="background: #fff8eb; color: var(--primary-dark); border: 1.5px solid var(--primary-color); width: 100%; font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Gọi thêm đồ ăn kèm (5k, 10k, 20k...)
             </button>
         </div>
 
@@ -69,12 +70,12 @@
             <form id="order-form" class="order-form">
                 <select id="payment-method" required>
                     <option value="" disabled selected>Chọn hình thức thanh toán</option>
-                    <option value="Tiền mặt">Tiền mặt</option>
-                    <option value="Chuyển khoản">Chuyển khoản</option>
-                    <option value="Momo">Momo</option>
+                    <option value="Tiền mặt">💵 Tiền mặt</option>
+                    <option value="Chuyển khoản">🏦 Chuyển khoản</option>
+                    <option value="Momo">📱 Momo</option>
                 </select>
                 <textarea id="order-note" placeholder="Ghi chú cho quán, ví dụ: ít cay, không hành, giao sau 12h..."></textarea>
-                <button type="submit" id="submit-order-btn" class="btn btn-primary btn-block">Đặt hàng</button>
+                <button type="submit" id="submit-order-btn" class="btn btn-primary btn-block"><i class="fa-solid fa-circle-check"></i> Đặt hàng ngay</button>
             </form>
         </div>
     </div>
@@ -82,7 +83,7 @@
     <!-- Khung nhỏ chọn đồ ăn thêm (trượt đè lên giỏ hàng) -->
     <div id="cart-extra-panel" style="position: fixed; top: 0; bottom: 0; right: -340px; width: 340px; background: white; z-index: 1002; box-shadow: var(--shadow); border-left: 1px solid var(--border-color); transition: right 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; flex-direction: column;">
         <div class="cart-header">
-            <h2>🍜 Gọi đồ ăn thêm</h2>
+            <h2><i class="fa-solid fa-utensils"></i> Gọi đồ ăn thêm</h2>
             <button id="close-cart-extra-btn" class="close-cart-btn" type="button">&times;</button>
         </div>
         <div style="padding: 12px 16px; background: #fffcf5; font-size: 0.9rem; color: var(--primary-dark); border-bottom: 1.5px dashed var(--border-color); font-weight: 500;">
@@ -92,8 +93,8 @@
             <!-- JS sẽ render danh sách món kèm nút chọn giá ở đây -->
         </div>
         <div style="padding: 15px; background: var(--surface-color); border-top: 1px solid var(--border-color); position: sticky; bottom: 0;">
-            <button id="confirm-cart-extra-btn" class="btn btn-primary btn-block" type="button" style="background: var(--green-color); border-color: var(--green-color); width: 100%;">
-                Xong (Quay lại giỏ hàng)
+            <button id="confirm-cart-extra-btn" class="btn btn-primary btn-block" type="button" style="background: var(--green-color); border-color: var(--green-color); width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <i class="fa-solid fa-circle-left"></i> Xong (Quay lại giỏ hàng)
             </button>
         </div>
     </div>

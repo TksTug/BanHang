@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <p class="product-price">${formatCurrency(product.price)}</p>
                         <button class="btn ${soldOut ? 'btn-secondary' : 'btn-primary'} add-to-cart-btn"
                             data-id="${product.id}" data-name="${product.name}" data-price="${product.price}" type="button" ${soldOut ? 'disabled' : ''}>
-                            ${soldOut ? 'Đã hết món' : 'Thêm vào giỏ'}
+                            ${soldOut ? '<i class="fa-solid fa-ban"></i> Hết món' : '<i class="fa-solid fa-cart-plus"></i> Thêm vào giỏ'}
                         </button>
                     </div>
                 `;
@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <button class="btn btn-secondary quick-price-btn" data-product-id="${product.id}" data-name="${product.name}" data-price="20000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+20k</button>
                             <div style="display: flex; gap: 4px; align-items: center; margin-left: auto;">
                                 <input type="number" class="custom-extra-price-input" data-product-id="${product.id}" data-name="${product.name}" placeholder="đ" min="1000" step="1000" style="width: 70px; padding: 4px 6px; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 4px; height: 28px;" ${soldOut ? 'disabled' : ''}>
-                                <button class="btn btn-confirm add-custom-extra-btn" data-product-id="${product.id}" data-name="${product.name}" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px; background: var(--green-color); color: white;" ${soldOut ? 'disabled' : ''}>Thêm</button>
+                                <button class="btn btn-confirm add-custom-extra-btn" data-product-id="${product.id}" data-name="${product.name}" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px; background: var(--green-color); color: white;" ${soldOut ? 'disabled' : ''}><i class="fa-solid fa-plus"></i> Thêm</button>
                             </div>
                         </div>
                     `;
@@ -262,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span>Tổng: ${formatCurrency(order.total_amount)}</span>
                             <span>Còn thiếu: ${formatCurrency(order.remaining_amount)}</span>
                         </div>
-                        ${order.status === 'unpaid' ? `<div class="order-actions-row"><button class="btn btn-secondary edit-my-order-btn" data-id="${order.id}" type="button">✏️ Sửa đơn</button><button class="btn btn-confirm add-extra-food-btn" data-id="${order.id}" type="button">🍜 Thêm đồ ăn</button></div>` : ''}
+                        ${order.status === 'unpaid' ? `<div class="order-actions-row"><button class="btn btn-secondary edit-my-order-btn" data-id="${order.id}" type="button"><i class="fa-solid fa-pen-to-square"></i> Sửa đơn</button><button class="btn btn-confirm add-extra-food-btn" data-id="${order.id}" type="button"><i class="fa-solid fa-utensils"></i> Thêm món</button></div>` : ''}
                     </article>
                 `).join('') : '<p class="muted">Bạn chưa có đơn nào.</p>'}
             `;

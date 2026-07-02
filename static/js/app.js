@@ -68,67 +68,64 @@ document.addEventListener('DOMContentLoaded', () => {
             const products = await response.json();
             allProducts = products;
             
-            const cartExtraFoodList = document.getElementById('cart-extra-food-list');
+            const cartExtraProductsList = document.getElementById('cart-extra-products-list');
             productGrid.innerHTML = '';
-            if (cartExtraFoodList) cartExtraFoodList.innerHTML = '';
+            if (cartExtraProductsList) cartExtraProductsList.innerHTML = '';
             
             if (!products.length) {
                 productGrid.innerHTML = '<p class="muted">Hôm nay chưa có món nào được mở bán.</p>';
                 return;
             }
 
-            let hasMainProducts = false;
-            let hasExtraProducts = false;
-
             products.forEach((product) => {
                 const soldOut = Boolean(product.is_sold_out);
-                // Các món đồng giá 30k khởi tạo từ daily_foods có mô tả đặc trưng
-                const isExtra = product.description && product.description.includes("Món đồng giá");
                 
-                if (isExtra) {
-                    if (cartExtraFoodList) {
-                        const btn = document.createElement('button');
-                        btn.className = 'btn btn-secondary quick-add-extra-btn';
-                        btn.type = 'button';
-                        btn.dataset.id = product.id;
-                        btn.dataset.name = product.name;
-                        btn.dataset.price = product.price;
-                        btn.style.whiteSpace = 'nowrap';
-                        btn.style.flexShrink = '0';
-                        btn.style.padding = '8px 14px';
-                        btn.style.fontSize = '0.85rem';
-                        btn.style.minHeight = 'auto';
-                        btn.disabled = soldOut;
-                        btn.innerHTML = `${product.name} ${soldOut ? '(Hết)' : '+'}`;
-                        cartExtraFoodList.appendChild(btn);
-                        hasExtraProducts = true;
-                    }
-                } else {
-                    const card = document.createElement('article');
-                    card.className = `product-card ${soldOut ? 'sold-out' : ''}`;
-                    card.innerHTML = `
-                        <img src="${product.image_url || 'https://via.placeholder.com/600x400.png?text=Mon+An'}" alt="${product.name}">
-                        <div class="product-info">
-                            <h3>${product.name}</h3>
-                            <p class="product-description">${(product.description || '').trim()}</p>
-                            <p class="product-price">${formatCurrency(product.price)}</p>
-                            <button class="btn ${soldOut ? 'btn-secondary' : 'btn-primary'} add-to-cart-btn"
-                                data-id="${product.id}" data-name="${product.name}" data-price="${product.price}" type="button" ${soldOut ? 'disabled' : ''}>
-                                ${soldOut ? 'Đã hết món' : 'Thêm vào giỏ'}
-                            </button>
+                // 1. Render ra trang chủ làm menu món chính như cũ
+                const card = document.createElement('article');
+                card.className = `product-card ${soldOut ? 'sold-out' : ''}`;
+                card.innerHTML = `
+                    <img src="${product.image_url || 'https://via.placeholder.com/600x400.png?text=Mon+An'}" alt="${product.name}">
+                    <div class="product-info">
+                        <h3>${product.name}</h3>
+                        <p class="product-description">${(product.description || '').trim()}</p>
+                        <p class="product-price">${formatCurrency(product.price)}</p>
+                        <button class="btn ${soldOut ? 'btn-secondary' : 'btn-primary'} add-to-cart-btn"
+                            data-id="${product.id}" data-name="${product.name}" data-price="${product.price}" type="button" ${soldOut ? 'disabled' : ''}>
+                            ${soldOut ? 'Đã hết món' : 'Thêm vào giỏ'}
+                        </button>
+                    </div>
+                `;
+                productGrid.appendChild(card);
+
+                // 2. Render vào danh sách món phụ Gọi thêm đồ ăn kèm bên trong giỏ hàng
+                if (cartExtraProductsList) {
+                    const item = document.createElement('div');
+                    item.className = 'cart-extra-product-item';
+                    item.style.display = 'flex';
+                    item.style.flexDirection = 'column';
+                    item.style.gap = '8px';
+                    item.style.paddingBottom = '12px';
+                    item.style.borderBottom = '1px solid var(--border-color)';
+                    
+                    item.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 700; font-size: 0.98rem; color: var(--text-color);">${product.name}</span>
+                            <span style="font-size: 0.85rem; color: var(--muted-color);">(Gốc: ${formatCurrency(product.price)})</span>
+                        </div>
+                        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                            <button class="btn btn-secondary quick-price-btn" data-name="${product.name}" data-price="5000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+5k</button>
+                            <button class="btn btn-secondary quick-price-btn" data-name="${product.name}" data-price="10000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+10k</button>
+                            <button class="btn btn-secondary quick-price-btn" data-name="${product.name}" data-price="15000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+15k</button>
+                            <button class="btn btn-secondary quick-price-btn" data-name="${product.name}" data-price="20000" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px;" ${soldOut ? 'disabled' : ''}>+20k</button>
+                            <div style="display: flex; gap: 4px; align-items: center; margin-left: auto;">
+                                <input type="number" class="custom-extra-price-input" data-name="${product.name}" placeholder="đ" min="1000" step="1000" style="width: 70px; padding: 4px 6px; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 4px; height: 28px;" ${soldOut ? 'disabled' : ''}>
+                                <button class="btn btn-confirm add-custom-extra-btn" data-name="${product.name}" type="button" style="padding: 4px 8px; font-size: 0.8rem; min-height: auto; height: 28px; background: var(--green-color); color: white;" ${soldOut ? 'disabled' : ''}>Thêm</button>
+                            </div>
                         </div>
                     `;
-                    productGrid.appendChild(card);
-                    hasMainProducts = true;
+                    cartExtraProductsList.appendChild(item);
                 }
             });
-
-            if (!hasMainProducts) {
-                productGrid.innerHTML = '<p class="muted">Không có món chính nào hôm nay.</p>';
-            }
-            if (!hasExtraProducts && cartExtraFoodList) {
-                cartExtraFoodList.innerHTML = '<p class="muted" style="font-size:0.85rem; width:100%; text-align:center; margin:0;">Hôm nay không có món ăn thêm nào.</p>';
-            }
         } catch (error) {
             console.error('Lỗi khi tải món:', error);
             productGrid.innerHTML = '<p>Không thể tải danh sách món. Vui lòng thử lại sau.</p>';
@@ -363,13 +360,77 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!cartDrawer.classList.contains('open')) toggleCart();
     });
 
-    // Lắng nghe sự kiện thêm đồ ăn kèm trong giỏ hàng
-    const cartExtraFoodList = document.getElementById('cart-extra-food-list');
-    if (cartExtraFoodList) {
-        cartExtraFoodList.addEventListener('click', (event) => {
-            const btn = event.target.closest('.quick-add-extra-btn');
-            if (!btn || btn.disabled) return;
-            addToCart(btn.dataset.id, btn.dataset.name, parseFloat(btn.dataset.price));
+    // Logic trượt mở/đóng Khung nhỏ Gọi đồ ăn thêm bên trong giỏ hàng
+    const cartExtraPanel = document.getElementById('cart-extra-panel');
+    const openCartExtraBtn = document.getElementById('open-cart-extra-btn');
+    const closeCartExtraBtn = document.getElementById('close-cart-extra-btn');
+    const confirmCartExtraBtn = document.getElementById('confirm-cart-extra-btn');
+    const cartExtraProductsList = document.getElementById('cart-extra-products-list');
+
+    if (openCartExtraBtn && cartExtraPanel) {
+        openCartExtraBtn.addEventListener('click', () => {
+            cartExtraPanel.style.right = '0';
+        });
+    }
+    if (closeCartExtraBtn && cartExtraPanel) {
+        closeCartExtraBtn.addEventListener('click', () => {
+            cartExtraPanel.style.right = '-100%';
+        });
+    }
+    if (confirmCartExtraBtn && cartExtraPanel) {
+        confirmCartExtraBtn.addEventListener('click', () => {
+            cartExtraPanel.style.right = '-100%';
+        });
+    }
+
+    // Lắng nghe sự kiện chọn mức giá đồ ăn kèm bên trong panel
+    if (cartExtraProductsList) {
+        cartExtraProductsList.addEventListener('click', (event) => {
+            const quickBtn = event.target.closest('.quick-price-btn');
+            const customBtn = event.target.closest('.add-custom-extra-btn');
+            
+            if (quickBtn) {
+                const name = quickBtn.dataset.name;
+                const price = parseFloat(quickBtn.dataset.price);
+                const extraId = `extra-${name}-${price}`;
+                addToCart(extraId, `${name} (thêm)`, price);
+                
+                // Hiệu ứng nhấp nháy nút để báo hiệu đã thêm
+                const origText = quickBtn.textContent;
+                quickBtn.textContent = '✓';
+                quickBtn.style.background = 'var(--green-color)';
+                quickBtn.style.color = 'white';
+                setTimeout(() => {
+                    quickBtn.textContent = origText;
+                    quickBtn.style.background = '';
+                    quickBtn.style.color = '';
+                }, 800);
+            }
+            
+            if (customBtn) {
+                const name = customBtn.dataset.name;
+                const container = customBtn.closest('div');
+                const input = container ? container.querySelector('.custom-extra-price-input') : null;
+                const price = parseFloat(input ? input.value : 0);
+                
+                if (!price || price < 1000) {
+                    alert('Vui lòng nhập số tiền hợp lệ (từ 1.000đ trở lên).');
+                    if (input) input.focus();
+                    return;
+                }
+                
+                const extraId = `extra-${name}-${price}`;
+                addToCart(extraId, `${name} (thêm)`, price);
+                if (input) input.value = ''; // Reset input
+                
+                const origText = customBtn.textContent;
+                customBtn.textContent = '✓';
+                customBtn.style.background = '#1b4d3e';
+                setTimeout(() => {
+                    customBtn.textContent = origText;
+                    customBtn.style.background = '';
+                }, 800);
+            }
         });
     }
 

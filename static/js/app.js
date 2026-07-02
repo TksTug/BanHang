@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let editingOrderId = null;
     let lastOrderId = null;
     let allProducts = [];
+    let isNewOrder = false;
 
     const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
     const formatDate = (value) => value ? new Intl.DateTimeFormat('vi-VN').format(new Date(value.replace(' ', 'T'))) : '';
@@ -236,6 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const openExtraFoodPanel = (orderId) => {
         lastOrderId = orderId;
+        isNewOrder = false; // Đánh dấu là thêm cho đơn cũ, không phải đơn mới đặt
         renderExtraFoodList();
         extraFoodPanel.classList.remove('hidden');
         extraFoodPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -318,15 +320,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             lastOrderId = result.order_id;
+            isNewOrder = true; // Đánh dấu là đơn hàng mới đặt
+            showNotification();
+            await loadCustomerSummary();
             cart = [];
             updateCart();
             orderForm.reset();
             if (cartDrawer.classList.contains('open')) {
                 toggleCart();
             }
-            
-            // Chuyển hướng người dùng sang trang thanh toán luôn kèm thông tin
-            window.location.href = `/payment?order_success=1&customer_id=${selectedCustomer.id}&order_id=${result.order_id}`;
+            renderExtraFoodList();
+            extraFoodPanel.classList.remove('hidden');
+            setTimeout(() => extraFoodPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
         } catch (error) {
             console.error('Lỗi khi đặt hàng:', error);
             alert('Không thể kết nối máy chủ để đặt hàng.');
@@ -373,7 +378,20 @@ document.addEventListener('DOMContentLoaded', () => {
     closeEditModal.addEventListener('click', () => { editModal.classList.add('hidden'); editingOrderId = null; });
     editModal.addEventListener('click', (e) => { if (e.target === editModal) { editModal.classList.add('hidden'); editingOrderId = null; } });
     saveEditOrderBtn.addEventListener('click', saveEditedCustomerOrder);
-    closeExtraPanel.addEventListener('click', () => extraFoodPanel.classList.add('hidden'));
+    const handleGotoPayment = () => {
+        if (isNewOrder && selectedCustomer && lastOrderId) {
+            window.location.href = `/payment?order_success=1&customer_id=${selectedCustomer.id}&order_id=${lastOrderId}`;
+        } else {
+            extraFoodPanel.classList.add('hidden');
+        }
+    };
+
+    closeExtraPanel.addEventListener('click', handleGotoPayment);
+    
+    const gotoPaymentBtn = document.getElementById('goto-payment-btn');
+    if (gotoPaymentBtn) {
+        gotoPaymentBtn.addEventListener('click', handleGotoPayment);
+    }
 
     customerSummary.addEventListener('click', (event) => {
         const editBtn = event.target.closest('.edit-my-order-btn');

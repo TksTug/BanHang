@@ -259,19 +259,32 @@ document.addEventListener('DOMContentLoaded', () => {
         const customerNotes = [];
 
         orders.forEach(order => {
+            const currentOrderItems = [];
+            let hasExtraItems = false;
+            
             if (order.items && order.items.length) {
                 order.items.forEach(item => {
                     let name = item.product_name;
-                    if (name.includes('(thêm)')) {
+                    const isExtra = name.includes('(thêm)');
+                    if (isExtra) {
                         const priceK = Math.round(item.price / 1000) + 'k';
                         name = name.replace('(thêm)', `(thêm ${priceK})`);
+                        hasExtraItems = true;
                     }
                     const qty = Number(item.quantity) || 0;
                     itemCounts[name] = (itemCounts[name] || 0) + qty;
+                    currentOrderItems.push(`${name} x${qty}`);
                 });
             }
-            if (order.note && order.note.trim()) {
-                customerNotes.push(`- ${order.customer_name}: ${order.note.trim()}`);
+            
+            const noteText = order.note ? order.note.trim() : '';
+            if (noteText || hasExtraItems) {
+                const itemsListStr = currentOrderItems.join(', ');
+                let detailStr = `- ${order.customer_name}: ${itemsListStr}`;
+                if (noteText) {
+                    detailStr += ` (Ghi chú: ${noteText})`;
+                }
+                customerNotes.push(detailStr);
             }
         });
 

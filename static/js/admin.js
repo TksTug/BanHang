@@ -280,15 +280,18 @@ document.addEventListener('DOMContentLoaded', () => {
         text += `-------------------------------------------\n`;
         
         const sortedItems = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]);
+        let totalDishes = 0;
         if (sortedItems.length === 0) {
             text += `Chưa có món ăn nào.\n`;
         } else {
             sortedItems.forEach(([name, count]) => {
                 text += `• ${name}: ${count} phần\n`;
+                totalDishes += count;
             });
         }
         
         text += `-------------------------------------------\n`;
+        text += `Tổng số phần đặt: ${totalDishes} phần\n`;
         text += `Tổng số đơn đặt: ${orders.length} đơn hàng\n`;
         
         if (customerNotes.length > 0) {

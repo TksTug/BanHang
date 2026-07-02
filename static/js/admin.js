@@ -261,7 +261,11 @@ document.addEventListener('DOMContentLoaded', () => {
         orders.forEach(order => {
             if (order.items && order.items.length) {
                 order.items.forEach(item => {
-                    const name = item.product_name;
+                    let name = item.product_name;
+                    if (name.includes('(thêm)')) {
+                        const priceK = Math.round(item.price / 1000) + 'k';
+                        name = name.replace('(thêm)', `(thêm ${priceK})`);
+                    }
                     const qty = Number(item.quantity) || 0;
                     itemCounts[name] = (itemCounts[name] || 0) + qty;
                 });

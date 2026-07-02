@@ -798,7 +798,7 @@ def get_public_debt():
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute(
         """
-        SELECT o.id, o.customer_name, o.total_amount, o.paid_amount, o.created_at, c.group_type, COALESCE(c.initial_debt, 0) as initial_debt
+        SELECT o.id, o.customer_id, o.customer_name, o.total_amount, o.paid_amount, o.created_at, c.group_type, COALESCE(c.initial_debt, 0) as initial_debt
         FROM orders o
         LEFT JOIN customers c ON c.id = o.customer_id
         ORDER BY o.customer_name ASC, o.created_at ASC
@@ -807,7 +807,7 @@ def get_public_debt():
     orders = cursor.fetchall()
     
     # Lấy toàn bộ khách hàng để nếu có khách chỉ có nợ cũ (chưa đặt món) vẫn hiện trong danh sách thanh toán
-    cursor.execute("SELECT name, group_type, initial_debt FROM customers WHERE is_active = 1")
+    cursor.execute("SELECT id, name, group_type, initial_debt FROM customers WHERE is_active = 1")
     all_custs = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -816,6 +816,7 @@ def get_public_debt():
     for c in all_custs:
         initial_debt = float(c["initial_debt"] or 0)
         customers[c["name"]] = {
+            "customer_id": c["id"],
             "customer_name": c["name"],
             "group_type": c["group_type"],
             "total_debt": initial_debt,
@@ -831,6 +832,7 @@ def get_public_debt():
         customer = customers.setdefault(
             customer_name,
             {
+                "customer_id": order["customer_id"],
                 "customer_name": customer_name,
                 "group_type": order["group_type"] or "regular",
                 "total_debt": float(order["initial_debt"] or 0),

@@ -101,6 +101,18 @@
                 gap: 24px;
             }
         }
+        @keyframes pulse-border {
+            0% { border-color: var(--primary-color); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); }
+            70% { border-color: var(--red-color); box-shadow: 0 0 0 10px rgba(128, 0, 32, 0); }
+            100% { border-color: var(--primary-color); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
+        }
+        .debt-item.highlighted-debt {
+            border: 2.5px solid var(--red-color) !important;
+            background-color: #fff9f9 !important;
+            animation: pulse-border 1.5s infinite;
+            transform: scale(1.02);
+            font-weight: 700;
+        }
     </style>
 </head>
 <body>
@@ -142,11 +154,40 @@
         </div>
     </main>
 
+    <!-- Popup thông báo đặt hàng thành công và gán GIF vui tươi -->
+    <div id="payment-success-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 440px; text-align: center; border: 2.5px solid var(--primary-color); overflow: hidden;">
+            <div class="modal-header" style="justify-content: center; background: linear-gradient(135deg, #1a252c 0%, #2c3e50 100%); color: white; padding: 18px; border-bottom: none;">
+                <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: 0.5px;">🎉 Đặt Món Thành Công!</h2>
+            </div>
+            <div class="modal-body" style="padding: 24px; gap: 18px; background: #ffffff;">
+                <p style="font-size: 1.15rem; margin: 0; font-weight: 600; color: var(--text-color);">
+                    Cảm ơn bạn đã đặt món ăn!
+                </p>
+                <p style="font-size: 0.98rem; margin: 0; color: var(--muted-color); line-height: 1.5;">
+                    Đơn của bạn đã được ghi nhận. Quét mã MoMo/VietQR bên cạnh và chuyển khoản thanh toán nhé!
+                </p>
+                
+                <!-- Khu vực hiển thị GIF vui nhộn -->
+                <div style="margin: 5px 0; border-radius: var(--border-radius); overflow: hidden; border: 1px solid var(--border-color); background: #fafafa; display: flex; align-items: center; justify-content: center; min-height: 180px;">
+                    <img id="success-gif" src="" alt="Thanh toán vui vẻ" style="width: 100%; max-height: 220px; object-fit: contain;">
+                </div>
+                
+                <button id="close-success-modal-btn" class="btn btn-primary btn-block" type="button" style="margin-top: 5px; font-size: 1.05rem; min-height: 48px; background: var(--green-color); border-color: var(--green-color);">
+                    Ok, để tôi quét mã thanh toán!
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
 
         const loadPublicDebt = async () => {
             const container = document.getElementById('public-debt-list');
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetCustomerId = urlParams.get('customer_id');
+
             try {
                 const response = await fetch('/api/public-debt');
                 const list = await response.json();
@@ -163,8 +204,13 @@
                     const datesHtml = (!isPaid && item.unpaid_dates && item.unpaid_dates.length) 
                         ? `<div class="debt-dates" style="font-size: 0.8rem; color: #a18a5e; margin-top: 4px;">Ngày nợ chưa trả: ${item.unpaid_dates.join(', ')}</div>`
                         : '';
+                    
+                    // Kiểm tra xem có cần highlight dòng của khách hàng vừa đặt món không
+                    const isHighlighted = targetCustomerId && String(item.customer_id) === String(targetCustomerId);
+                    const highlightClass = isHighlighted ? 'highlighted-debt' : '';
+                    
                     return `
-                        <div class="debt-item ${item.group_type === 'vjp' ? 'vjp' : ''}">
+                        <div class="debt-item ${item.group_type === 'vjp' ? 'vjp' : ''} ${highlightClass}" id="debt-item-${item.customer_id}">
                             <div class="debt-name">
                                 <div>
                                     ${item.group_type === 'vjp' ? '★ ' : ''}${item.customer_name}
@@ -176,6 +222,17 @@
                         </div>
                     `;
                 }).join('');
+
+                // Cuộn tới dòng được highlight sau khi render xong
+                if (targetCustomerId) {
+                    setTimeout(() => {
+                        const targetEl = document.getElementById(`debt-item-${targetCustomerId}`);
+                        if (targetEl) {
+                            targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 500);
+                }
+
             } catch (error) {
                 console.error('Lỗi khi tải danh sách công nợ:', error);
                 container.innerHTML = `<p class="muted">Không thể tải danh sách lúc này. Vui lòng tải lại trang.</p>`;
@@ -184,6 +241,28 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             loadPublicDebt();
+
+            // Xử lý hiển thị popup thành công khi đặt món xong
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('order_success') === '1') {
+                const modal = document.getElementById('payment-success-modal');
+                const gifImg = document.getElementById('success-gif');
+                
+                // Nguồn ảnh GIF mặc định, nếu có file local thì dùng, không thì fallback sang gif dễ thương online
+                gifImg.src = '/static/uploads/payment_fun.gif';
+                gifImg.onerror = () => {
+                    // Fallback link online (hình em mèo dễ thương đang vẫy tay vòi tiền)
+                    gifImg.src = 'https://media.giphy.com/media/Up2MUtgX5qg1eJGFp2/giphy.gif'; 
+                };
+                
+                modal.classList.remove('hidden');
+                
+                document.getElementById('close-success-modal-btn').addEventListener('click', () => {
+                    modal.classList.add('hidden');
+                    // Xóa query params trên URL để khi reload không bị hiện lại popup
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                });
+            }
         });
     </script>
 </body>

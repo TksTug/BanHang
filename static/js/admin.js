@@ -245,8 +245,86 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    const updateDailySummary = (orders) => {
+        const summaryContent = document.getElementById('daily-summary-content');
+        if (!summaryContent) return;
+
+        if (!orders.length) {
+            summaryContent.textContent = "Không có món ăn nào được đặt trong ngày này.";
+            return;
+        }
+
+        // Đếm số lượng món
+        const itemCounts = {};
+        const customerNotes = [];
+
+        orders.forEach(order => {
+            if (order.items && order.items.length) {
+                order.items.forEach(item => {
+                    const name = item.product_name;
+                    const qty = Number(item.quantity) || 0;
+                    itemCounts[name] = (itemCounts[name] || 0) + qty;
+                });
+            }
+            if (order.note && order.note.trim()) {
+                customerNotes.push(`- ${order.customer_name}: ${order.note.trim()}`);
+            }
+        });
+
+        const selectedDateStr = orderDateFilter.value ? formatDate(orderDateFilter.value) : "Tất cả các ngày";
+        let text = `📋 TỔNG HỢP MÓN ĐẶT NGÀY ${selectedDateStr}\n`;
+        text += `-------------------------------------------\n`;
+        
+        const sortedItems = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]);
+        if (sortedItems.length === 0) {
+            text += `Chưa có món ăn nào.\n`;
+        } else {
+            sortedItems.forEach(([name, count]) => {
+                text += `• ${name}: ${count} phần\n`;
+            });
+        }
+        
+        text += `-------------------------------------------\n`;
+        text += `Tổng số đơn đặt: ${orders.length} đơn hàng\n`;
+        
+        if (customerNotes.length > 0) {
+            text += `\n📝 GHI CHÚ CỦA KHÁCH HÀNG:\n`;
+            text += customerNotes.join('\n') + `\n`;
+        }
+
+        summaryContent.textContent = text;
+    };
+
+    const copySummaryBtn = document.getElementById('copy-summary-btn');
+    if (copySummaryBtn) {
+        copySummaryBtn.addEventListener('click', () => {
+            const summaryContent = document.getElementById('daily-summary-content');
+            if (!summaryContent) return;
+            const text = summaryContent.textContent;
+            if (text.includes("Không có món ăn nào được đặt")) {
+                alert("Không có dữ liệu món ăn để copy!");
+                return;
+            }
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = copySummaryBtn.textContent;
+                copySummaryBtn.textContent = '✅ Đã copy danh sách!';
+                copySummaryBtn.style.backgroundColor = '#1b4d3e';
+                copySummaryBtn.style.color = '#ffffff';
+                setTimeout(() => {
+                    copySummaryBtn.textContent = originalText;
+                    copySummaryBtn.style.backgroundColor = '';
+                    copySummaryBtn.style.color = '';
+                }, 2000);
+            }).catch(err => {
+                console.error('Không thể copy:', err);
+                alert('Có lỗi xảy ra khi sao chép. Vui lòng chọn văn bản và sao chép thủ công.');
+            });
+        });
+    }
+
     const renderOrders = () => {
         const orders = filteredOrders();
+        updateDailySummary(orders);
         ordersTableBody.innerHTML = '';
         if (!orders.length) {
             noOrdersMessage.classList.remove('hidden');
@@ -601,6 +679,12 @@ document.addEventListener('DOMContentLoaded', () => {
             debtAmount.focus();
         }
     });
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    orderDateFilter.value = `${yyyy}-${mm}-${dd}`;
 
     Promise.all([loadDayStatus(), loadCustomers(), loadProducts(), refreshOrders()]);
 });

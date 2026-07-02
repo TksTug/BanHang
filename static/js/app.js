@@ -318,15 +318,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             lastOrderId = result.order_id;
-            showNotification();
-            await loadCustomerSummary();
             cart = [];
             updateCart();
             orderForm.reset();
-            toggleCart();
-            renderExtraFoodList();
-            extraFoodPanel.classList.remove('hidden');
-            setTimeout(() => extraFoodPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400);
+            if (cartDrawer.classList.contains('open')) {
+                toggleCart();
+            }
+            
+            // Chuyển hướng người dùng sang trang thanh toán luôn kèm thông tin
+            window.location.href = `/payment?order_success=1&customer_id=${selectedCustomer.id}&order_id=${result.order_id}`;
         } catch (error) {
             console.error('Lỗi khi đặt hàng:', error);
             alert('Không thể kết nối máy chủ để đặt hàng.');
